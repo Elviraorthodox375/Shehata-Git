@@ -17,27 +17,30 @@ Status: ✅ complete · 🚧 in progress · ⬜ planned
 - Redacted local activity history, diagnostics, and exact unlink/restore.
 - Windows NSIS packaging with CLI/helper/MCP sidecars and user PATH setup.
 
-## Public Windows beta 🚧
+## Public preview 🚧
 
 - ✅ Scalable searchable selectors and collapsible repository cards.
 - ✅ Explicit GitHub CLI default-account switching.
 - ✅ Public documentation, contribution policy, security policy, issue/PR
   templates, and continuous integration.
+- ✅ Sanitized product screenshots in the README.
+- ✅ Unsigned Windows and macOS installers published from CI on every tag.
 - ⬜ Complete the two-account manual acceptance checklist on disposable private
   repositories.
-- ⬜ Capture sanitized screenshots and short onboarding media.
+- ⬜ Record short onboarding media showing a repository being routed.
 - ⬜ Sign the Windows executable and installer.
 - ⬜ Add signed automatic updates with an explicit user-controlled channel.
-- ⬜ Publish the first reviewed prerelease after the checklist passes.
+- ⬜ Publish the first reviewed stable release after the checklist passes.
 
-## Cross-platform preview ⬜
+## Cross-platform preview 🚧
 
-- Build and test on Apple silicon and Intel macOS.
-- Add macOS signing, hardened runtime, and notarized DMG distribution.
-- Validate Linux WebKit packaging and desktop integration.
-- Replace Windows-only prerequisite installation with platform-specific,
+- ✅ Build an Apple silicon macOS disk image from CI.
+- ⬜ Build and test on Intel macOS.
+- ⬜ Add macOS signing, hardened runtime, and notarized DMG distribution.
+- ⬜ Validate Linux WebKit packaging and desktop integration.
+- ⬜ Replace Windows-only prerequisite installation with platform-specific,
   reviewable guidance.
-- Verify keychain and credential-helper behavior on every supported platform.
+- ⬜ Verify keychain and credential-helper behavior on every supported platform.
 
 ## Workflow expansion ⬜
 
