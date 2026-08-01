@@ -1,49 +1,91 @@
-import { useQuery } from "@tanstack/react-query";
-import { FolderGit2, FolderOpen, RefreshCw } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { open } from "@tauri-apps/plugin-dialog";
+import {
+  AlertCircle,
+  FolderGit2,
+  FolderOpen,
+  GitBranch,
+  Globe,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { listRepositories } from "@/lib/tauri";
+import { addRepository, listRepositories } from "@/lib/tauri";
 
-/**
- * Repositories page.
- * Lists repositories registered in Shehata Git's local database.
- * Repository linking + account assignment arrives in Phases 4–5.
- */
 export function RepositoriesPage() {
+  const queryClient = useQueryClient();
   const repos = useQuery({
     queryKey: ["repositories"],
     queryFn: listRepositories,
   });
+  const addRepo = useMutation({
+    mutationFn: addRepository,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["repositories"] });
+    },
+  });
+
+  async function chooseRepository() {
+    addRepo.reset();
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose a Git repository",
+    });
+    if (selected) {
+      addRepo.mutate(selected);
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Repositories registered in Shehata Git, each with its assigned account.
+    <div className="mx-auto max-w-3xl space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Add a local Git repository. Shehata Git reads its configuration but does not change it
+          until you explicitly assign an account in the next step.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => repos.refetch()}
-          disabled={repos.isFetching}
-        >
-          <RefreshCw className={repos.isFetching ? "animate-spin" : undefined} aria-hidden />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => repos.refetch()}
+            disabled={repos.isFetching}
+          >
+            <RefreshCw className={repos.isFetching ? "animate-spin" : undefined} aria-hidden />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={chooseRepository} disabled={addRepo.isPending}>
+            {addRepo.isPending ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <FolderOpen aria-hidden />
+            )}
+            {addRepo.isPending ? "Checking…" : "Add repository"}
+          </Button>
+        </div>
       </div>
 
-      {repos.isLoading && <p className="text-sm text-muted-foreground">Reading repositories…</p>}
-
-      {repos.isError && (
+      {(repos.isError || addRepo.isError) && (
         <Card className="border-destructive/40">
-          <CardContent className="py-4">
-            <p className="text-sm text-destructive">
-              {repos.error instanceof Error ? repos.error.message : "Could not read repositories."}
-            </p>
+          <CardContent className="flex gap-3 py-4">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
+            <div>
+              <p className="text-sm font-medium text-destructive">Could not add that folder</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {addRepo.error instanceof Error
+                  ? addRepo.error.message
+                  : repos.error instanceof Error
+                    ? repos.error.message
+                    : "Choose a folder that contains a Git repository."}
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
+
+      {repos.isLoading && <p className="text-sm text-muted-foreground">Reading repositories…</p>}
 
       {repos.data?.length === 0 && (
         <Card>
@@ -52,13 +94,12 @@ export function RepositoriesPage() {
             <div>
               <p className="font-medium">No repositories linked yet</p>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                When you link a repository, you pick exactly one GitHub account for it. From then
-                on, every push uses that account — no matter which tool pushes.
+                Choose a repository folder. It will be inspected safely before anything is saved.
               </p>
             </div>
-            <Button disabled title="Arrives in the repositories milestone (Phase 4)">
+            <Button onClick={chooseRepository} disabled={addRepo.isPending}>
               <FolderOpen aria-hidden />
-              Add repository (soon)
+              Choose repository
             </Button>
           </CardContent>
         </Card>
@@ -67,19 +108,40 @@ export function RepositoriesPage() {
       <div className="grid gap-3">
         {repos.data?.map((repo) => (
           <Card key={repo.id}>
-            <CardContent className="flex items-center gap-3 py-4">
-              <FolderGit2 className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{repo.display_name}</p>
-                <p className="truncate font-mono text-xs text-muted-foreground">
-                  {repo.canonical_path}
-                </p>
+            <CardContent className="space-y-3 py-4">
+              <div className="flex items-start gap-3">
+                <FolderGit2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{repo.display_name}</p>
+                    {repo.remote_protocol === "ssh" && <Badge variant="warning">SSH</Badge>}
+                    {repo.remote_protocol === "https" && <Badge variant="secondary">HTTPS</Badge>}
+                  </div>
+                  <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                    {repo.canonical_path}
+                  </p>
+                </div>
+                {repo.assigned_login ? (
+                  <Badge variant="success">@{repo.assigned_login}</Badge>
+                ) : (
+                  <Badge variant="warning">account needed</Badge>
+                )}
               </div>
-              {repo.assigned_login ? (
-                <Badge variant="success">@{repo.assigned_login}</Badge>
-              ) : (
-                <Badge variant="warning">no account assigned</Badge>
-              )}
+
+              <div className="grid gap-2 border-t border-border pt-3 text-xs text-muted-foreground sm:grid-cols-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <GitBranch className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="truncate">{repo.current_branch ?? "No commits yet"}</span>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span className="truncate">
+                    {repo.host && repo.owner && repo.repo_name
+                      ? `${repo.host}/${repo.owner}/${repo.repo_name}`
+                      : "No supported GitHub remote detected"}
+                  </span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         ))}

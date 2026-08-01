@@ -24,6 +24,10 @@ export function listRepositories(): Promise<RepositorySummary[]> {
   return invoke<RepositorySummary[]>("repositories_list");
 }
 
+export function addRepository(path: string): Promise<RepositorySummary> {
+  return invoke<RepositorySummary>("repositories_add", { path });
+}
+
 export function listAuditEvents(): Promise<AuditEvent[]> {
   return invoke<AuditEvent[]>("audit_list");
 }

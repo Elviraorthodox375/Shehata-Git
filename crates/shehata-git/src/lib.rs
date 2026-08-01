@@ -6,7 +6,12 @@
 //! - Destructive operations are not exposed by this crate at all.
 
 pub mod remote;
+pub mod repository;
 pub mod runner;
 
-pub use remote::{parse_remote_url, RemoteUrl};
+pub use remote::{parse_remote_url, RemoteProtocol, RemoteUrl};
+pub use repository::{
+    discover_repository, DiscoveredRepository, RepositoryDiscoveryError, RepositoryRemote,
+    RepositoryRemoteProtocol, WorktreeStatus,
+};
 pub use runner::{CommandOutput, GitError, GitRunner};

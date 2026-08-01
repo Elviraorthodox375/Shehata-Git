@@ -5,23 +5,9 @@
 //! crosses to the frontend.
 
 use serde::Serialize;
-use shehata_core::{accounts as core_accounts, Doctor};
+use shehata_core::{accounts as core_accounts, repositories as core_repositories, Doctor};
 use shehata_github::{GhLoginEvent, GhRunner};
 use shehata_storage::{queries, Database};
-
-/// Frontend-facing repository summary (joined with the assigned login).
-#[derive(Debug, Serialize)]
-struct RepositorySummary {
-    id: String,
-    display_name: String,
-    canonical_path: String,
-    host: Option<String>,
-    owner: Option<String>,
-    repo_name: Option<String>,
-    current_branch: Option<String>,
-    assigned_login: Option<String>,
-    push_policy: String,
-}
 
 #[derive(Debug, Serialize)]
 struct McpInfo {
@@ -77,29 +63,22 @@ async fn accounts_add(
 }
 
 #[tauri::command]
-fn repositories_list() -> Result<Vec<RepositorySummary>, String> {
+fn repositories_list() -> Result<Vec<core_repositories::RepositorySummary>, String> {
     let db = open_db()?;
-    let repos = queries::list_repositories(&db)
+    core_repositories::list_repository_summaries(&db)
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_add(path: String) -> Result<core_repositories::RepositorySummary, String> {
+    let discovered = core_repositories::discover_selected_repository(&path)
+        .await
         .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
-    let mut out = Vec::with_capacity(repos.len());
-    for repo in repos {
-        let assigned_login = repo
-            .assigned_account_id
-            .and_then(|id| queries::find_account_by_id(&db, id).ok().flatten())
-            .map(|a| a.login);
-        out.push(RepositorySummary {
-            id: repo.id,
-            display_name: repo.display_name,
-            canonical_path: repo.canonical_path,
-            host: repo.host,
-            owner: repo.owner,
-            repo_name: repo.repo_name,
-            current_branch: repo.current_branch,
-            assigned_login,
-            push_policy: repo.push_policy,
-        });
-    }
-    Ok(out)
+    let db = open_db()?;
+    let saved = core_repositories::save_discovered_repository(&db, &discovered)
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    core_repositories::repository_summary(&db, saved)
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
 }
 
 #[tauri::command]
@@ -151,6 +130,7 @@ pub fn run() {
             accounts_list,
             accounts_add,
             repositories_list,
+            repositories_add,
             audit_list,
             mcp_info,
         ])

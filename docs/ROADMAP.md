@@ -21,16 +21,20 @@
   PATH, MCP) with plain-language repair hints.
 - `shehata doctor` CLI with `--json` and exit code 4 on unhealthy.
 
-## Phase 3 — Accounts ⬜
+## Phase 3 — Accounts 🚧
 
-- Real account cards from `gh auth status --json hosts`.
-- Browser login (`gh auth login --web`) with progress modal.
+- ✅ Real account cards from `gh auth status --json hosts`.
+- ✅ Browser login (`gh auth login --web`) with progress modal.
 - Avatar/profile metadata fetched token-in-backend only.
+- Real owner browser-login acceptance is still pending.
 
-## Phase 4 — Repositories ⬜
+## Phase 4 — Repositories 🚧
 
-- Native folder picker, worktree validation, remote/branch/status parsing.
-- Repository dashboard.
+- ✅ Native folder picker and canonical worktree validation.
+- ✅ Remote, branch, HEAD, upstream, status, identity, and local credential-config discovery.
+- ✅ SQLite persistence that preserves existing routing state on refresh.
+- ✅ Repository dashboard with branch, protocol, remote, and assignment state.
+- Real user-repository selection acceptance is still pending.
 
 ## Phase 5 — Assignment & identity ⬜
 

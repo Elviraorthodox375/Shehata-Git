@@ -51,6 +51,9 @@ pub enum ShehataError {
     Git(#[from] shehata_git::GitError),
 
     #[error(transparent)]
+    RepositoryDiscovery(#[from] shehata_git::RepositoryDiscoveryError),
+
+    #[error(transparent)]
     Github(#[from] shehata_github::GhError),
 
     #[error(transparent)]
@@ -77,6 +80,7 @@ impl ShehataError {
             Self::OperationBlocked(_) => "operation_blocked",
             Self::InvalidInput(_) => "invalid_input",
             Self::Git(_) => "git_error",
+            Self::RepositoryDiscovery(_) => "repository_discovery_error",
             Self::Github(_) => "github_cli_error",
             Self::Storage(_) => "storage_error",
             Self::Internal(_) => "internal_error",

@@ -8,6 +8,7 @@ pub mod doctor;
 pub mod error;
 pub mod models;
 pub mod redact;
+pub mod repositories;
 
 pub use doctor::{Doctor, APP_VERSION};
 pub use error::{Result, ShehataError};

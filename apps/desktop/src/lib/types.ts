@@ -42,8 +42,13 @@ export interface RepositorySummary {
   host: string | null;
   owner: string | null;
   repo_name: string | null;
+  remote_name: string | null;
+  remote_url: string | null;
+  remote_protocol: "https" | "ssh" | null;
   current_branch: string | null;
   assigned_login: string | null;
+  commit_name: string | null;
+  commit_email: string | null;
   push_policy: string;
 }
 

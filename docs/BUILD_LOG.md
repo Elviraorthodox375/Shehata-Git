@@ -5,6 +5,34 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 4 repository discovery and native folder picker
+
+### Repository discovery
+
+- Added read-only repository discovery to `shehata-git` using only argument-array Git commands.
+- Canonicalizes the selected folder and validates that it is a Git worktree.
+- Reads the top-level worktree path, Git directory, common Git directory, branch or detached state, HEAD, upstream, remotes, ahead/behind counts, working-tree summary, local commit identity, and existing local credential settings.
+- Parses HTTPS and SSH GitHub remotes without changing them. Unsupported/local remotes remain visible without being misidentified as GitHub.
+- Added temporary-repository tests for valid worktrees, non-repository folders, status parsing, and primary-remote selection.
+
+### Persistence and desktop flow
+
+- Added shared core orchestration that persists discovered metadata in SQLite without holding a database connection across an await point.
+- Re-adding a known canonical path refreshes discovery metadata while preserving its stable id, assigned account, push policy, and creation time.
+- Added a Tauri command and native Windows folder picker capability for selecting one repository folder.
+- Replaced the disabled placeholder with a functional Add repository flow and repository cards showing branch, remote protocol, GitHub path, and assignment state.
+- No repository Git configuration, remote, credentials, or global settings are changed during discovery.
+
+### Verification
+
+- Targeted Rust tests passed for `shehata-git`, `shehata-storage`, `shehata-core`, and the desktop bridge.
+- Final repository gate passed: workspace formatting, clippy with warnings denied, all 49 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+- Frontend strict typecheck, tests, Biome lint, and production Vite build passed.
+- Native Tauri debug application built successfully with `--no-bundle`; no installer was generated.
+- Visually verified the Repositories page and confirmed Add repository opens the native Windows folder picker. The picker was cancelled, so no user repository was saved during UI verification.
+
+---
+
 ## 2026-08-01 — Recovery audit, Phase 1/2 verification, and Phase 3 browser login
 
 ### Recovered state

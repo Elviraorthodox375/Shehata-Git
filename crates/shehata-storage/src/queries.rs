@@ -151,6 +151,54 @@ pub fn insert_repository(db: &Database, repo: &RepositoryRecord) -> Result<(), S
     Ok(())
 }
 
+/// Insert a newly discovered repository or refresh its non-routing metadata.
+/// Existing account assignment, push policy, stable id, and creation time are
+/// intentionally preserved on a canonical-path conflict.
+pub fn upsert_repository(db: &Database, repo: &RepositoryRecord) -> Result<(), StorageError> {
+    db.connection().execute(
+        "INSERT INTO repositories (
+            id, canonical_path, git_dir, git_common_dir, display_name, host, owner,
+            repo_name, remote_name, remote_url, current_branch, assigned_account_id,
+            commit_name, commit_email, push_policy, created_at, updated_at, last_seen_at
+         ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
+         ON CONFLICT (canonical_path) DO UPDATE SET
+            git_dir = excluded.git_dir,
+            git_common_dir = excluded.git_common_dir,
+            display_name = excluded.display_name,
+            host = excluded.host,
+            owner = excluded.owner,
+            repo_name = excluded.repo_name,
+            remote_name = excluded.remote_name,
+            remote_url = excluded.remote_url,
+            current_branch = excluded.current_branch,
+            commit_name = excluded.commit_name,
+            commit_email = excluded.commit_email,
+            updated_at = excluded.updated_at,
+            last_seen_at = excluded.last_seen_at",
+        params![
+            repo.id,
+            repo.canonical_path,
+            repo.git_dir,
+            repo.git_common_dir,
+            repo.display_name,
+            repo.host,
+            repo.owner,
+            repo.repo_name,
+            repo.remote_name,
+            repo.remote_url,
+            repo.current_branch,
+            repo.assigned_account_id,
+            repo.commit_name,
+            repo.commit_email,
+            repo.push_policy,
+            repo.created_at,
+            repo.updated_at,
+            repo.last_seen_at,
+        ],
+    )?;
+    Ok(())
+}
+
 const REPO_COLUMNS: &str = "id, canonical_path, git_dir, git_common_dir, display_name,
      host, owner, repo_name, remote_name, remote_url, current_branch,
      assigned_account_id, commit_name, commit_email, push_policy,
@@ -423,6 +471,28 @@ mod tests {
 
         delete_repository(&db, "repo-1").unwrap();
         assert!(find_repository_by_id(&db, "repo-1").unwrap().is_none());
+    }
+
+    #[test]
+    fn repository_upsert_preserves_routing_fields() {
+        let db = Database::open_in_memory().unwrap();
+        let account_id = upsert_account(&db, "github.com", "octocat", "valid").unwrap();
+        let mut repo = sample_repo("repo-1");
+        repo.assigned_account_id = Some(account_id);
+        repo.push_policy = "ask_before_push".to_string();
+        insert_repository(&db, &repo).unwrap();
+
+        let mut refreshed = sample_repo("different-id");
+        refreshed.current_branch = Some("feature/refreshed".to_string());
+        upsert_repository(&db, &refreshed).unwrap();
+
+        let stored = find_repository_by_path(&db, "D:/code/example")
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.id, "repo-1");
+        assert_eq!(stored.assigned_account_id, Some(account_id));
+        assert_eq!(stored.push_policy, "ask_before_push");
+        assert_eq!(stored.current_branch.as_deref(), Some("feature/refreshed"));
     }
 
     #[test]
