@@ -13,8 +13,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { installPrerequisites, type PrerequisiteId, runDoctor } from "@/lib/tauri";
-import type { CheckStatus, SystemCheck } from "@/lib/types";
+import {
+  cancelAccountLogin,
+  grantAccountScope,
+  installPrerequisites,
+  type PrerequisiteId,
+  runDoctor,
+} from "@/lib/tauri";
+import type { AccountScopeRepair, CheckStatus, GhLoginEvent, SystemCheck } from "@/lib/types";
+import { AccountLoginDialog } from "@/pages/AccountsPage";
 
 const STATUS_META: Record<
   CheckStatus,
@@ -30,7 +37,15 @@ const INSTALLABLE_CHECKS: Record<string, PrerequisiteId> = {
   gh: "github_cli",
 };
 
-function AttentionCheckCard({ check }: { check: SystemCheck }) {
+function AttentionCheckCard({
+  check,
+  onRepair,
+  repairing,
+}: {
+  check: SystemCheck;
+  onRepair: (target: AccountScopeRepair) => void;
+  repairing: AccountScopeRepair | null;
+}) {
   const meta = STATUS_META[check.status];
   const Icon = meta.icon;
   return (
@@ -64,6 +79,28 @@ function AttentionCheckCard({ check }: { check: SystemCheck }) {
           <div className="rounded-[0.6rem] border border-warning/30 bg-warning/10 px-3 py-2">
             <p className="text-xs font-medium text-warning">How to fix</p>
             <p className="mt-0.5 text-sm text-foreground/90">{check.repair_hint}</p>
+          </div>
+        )}
+        {(check.repairable_accounts?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {(check.repairable_accounts ?? []).map((target) => {
+              const busy = repairing?.login === target.login && repairing?.host === target.host;
+              return (
+                <Button
+                  key={`${target.host}/${target.login}/${target.scope}`}
+                  size="sm"
+                  onClick={() => onRepair(target)}
+                  disabled={repairing !== null}
+                >
+                  {busy ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                  )}
+                  Grant {target.scope} access to @{target.login}
+                </Button>
+              );
+            })}
           </div>
         )}
       </CardContent>
@@ -115,6 +152,37 @@ export function DoctorPage() {
     },
     onError: () => setSetupConfirmOpen(false),
   });
+
+  const [scopeTarget, setScopeTarget] = useState<AccountScopeRepair | null>(null);
+  const [scopeEvent, setScopeEvent] = useState<GhLoginEvent | null>(null);
+  const [scopeDone, setScopeDone] = useState(false);
+  const grantScope = useMutation({
+    mutationFn: (target: AccountScopeRepair) => grantAccountScope(target, setScopeEvent),
+    onSuccess: async () => {
+      setScopeDone(true);
+      await Promise.all([
+        doctor.refetch(),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+      ]);
+    },
+  });
+  const cancelScope = useMutation({ mutationFn: cancelAccountLogin });
+
+  function startRepair(target: AccountScopeRepair) {
+    setScopeTarget(target);
+    setScopeEvent(null);
+    setScopeDone(false);
+    grantScope.reset();
+    grantScope.mutate(target);
+  }
+
+  function closeRepair() {
+    setScopeTarget(null);
+    setScopeEvent(null);
+    setScopeDone(false);
+    grantScope.reset();
+    cancelScope.reset();
+  }
 
   const installableLabels = installable
     .map((id) => (id === "git" ? "Git" : "GitHub CLI"))
@@ -211,7 +279,12 @@ export function DoctorPage() {
       {attentionChecks.length > 0 && (
         <div className="grid gap-3">
           {attentionChecks.map((check) => (
-            <AttentionCheckCard key={check.id} check={check} />
+            <AttentionCheckCard
+              key={check.id}
+              check={check}
+              onRepair={startRepair}
+              repairing={grantScope.isPending ? scopeTarget : null}
+            />
           ))}
         </div>
       )}
@@ -233,6 +306,20 @@ export function DoctorPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {scopeTarget && (
+        <AccountLoginDialog
+          event={scopeEvent}
+          pending={grantScope.isPending}
+          success={scopeDone}
+          error={grantScope.error ? String(grantScope.error) : null}
+          onClose={closeRepair}
+          onCancel={() => cancelScope.mutate()}
+          canceling={cancelScope.isPending}
+          title={`Grant ${scopeTarget.scope} access`}
+          description={`GitHub will ask you to approve the ${scopeTarget.scope} permission for @${scopeTarget.login}. Shehata Git restores your previous CLI default account when this finishes.`}
+        />
       )}
 
       {setupConfirmOpen && (

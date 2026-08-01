@@ -22,7 +22,7 @@ secrecy.workspace = true
 zeroize.workspace = true
 which = "8"
 
-tokio = { workspace = true, features = ["process"] }
+tokio = { workspace = true, features = ["process", "sync"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

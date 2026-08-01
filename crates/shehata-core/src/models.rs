@@ -20,6 +20,18 @@ pub struct SystemCheck {
     /// Simple repair instruction when not ready.
     pub repair_hint: Option<String>,
     pub version: Option<String>,
+    /// Accounts this check can repair in place, so the UI can offer a button
+    /// instead of an instruction. Empty for checks the app cannot fix itself.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repairable_accounts: Vec<AccountScopeRepair>,
+}
+
+/// One account that is missing a single OAuth scope Shehata Git can request.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AccountScopeRepair {
+    pub host: String,
+    pub login: String,
+    pub scope: String,
 }
 
 impl SystemCheck {
@@ -36,6 +48,7 @@ impl SystemCheck {
             detail: detail.into(),
             repair_hint: None,
             version,
+            repairable_accounts: Vec::new(),
         }
     }
 
@@ -52,6 +65,7 @@ impl SystemCheck {
             detail: detail.into(),
             repair_hint: Some(repair.into()),
             version: None,
+            repairable_accounts: Vec::new(),
         }
     }
 
@@ -69,7 +83,14 @@ impl SystemCheck {
             detail: detail.into(),
             repair_hint: Some(repair.into()),
             version,
+            repairable_accounts: Vec::new(),
         }
+    }
+
+    /// Attach the accounts this check can repair through the app.
+    pub fn repairing(mut self, accounts: Vec<AccountScopeRepair>) -> Self {
+        self.repairable_accounts = accounts;
+        self
     }
 }
 

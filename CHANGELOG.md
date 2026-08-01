@@ -4,6 +4,20 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.9 - 2026-08-01
+
+### Added
+
+- System check can now repair a missing `workflow` scope in place. Choosing
+  **Grant workflow access** opens GitHub's own approval flow for that exact
+  account and restores the previous CLI default account afterwards, including
+  when the request fails or is cancelled.
+
+### Security
+
+- Only scopes on an explicit allow-list may be requested from the GitHub CLI,
+  so a future caller cannot widen an account's permissions by accident.
+
 ## 0.1.8 - 2026-08-01
 
 ### Changed

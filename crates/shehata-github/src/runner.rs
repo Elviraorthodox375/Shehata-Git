@@ -184,7 +184,20 @@ impl GhRunner {
     where
         F: Fn(GhLoginEvent) + Send + Sync + 'static,
     {
-        self.login_web_inner(on_event, std::future::pending()).await
+        self.browser_auth(
+            &[
+                "auth",
+                "login",
+                "--hostname",
+                "github.com",
+                "--git-protocol",
+                "https",
+                "--web",
+            ],
+            on_event,
+            std::future::pending(),
+        )
+        .await
     }
 
     /// Start browser login and stop the spawned GitHub CLI process when the
@@ -197,13 +210,53 @@ impl GhRunner {
     where
         F: Fn(GhLoginEvent) + Send + Sync + 'static,
     {
-        self.login_web_inner(on_event, async move {
-            let _ = cancel.await;
-        })
+        self.browser_auth(
+            &[
+                "auth",
+                "login",
+                "--hostname",
+                "github.com",
+                "--git-protocol",
+                "https",
+                "--web",
+            ],
+            on_event,
+            async move {
+                let _ = cancel.await;
+            },
+        )
         .await
     }
 
-    async fn login_web_inner<F, C>(&self, on_event: F, cancel: C) -> Result<(), GhError>
+    /// Add one OAuth scope to the currently active account through the same
+    /// browser device flow used for sign-in.
+    ///
+    /// `gh auth refresh` always acts on the active account for the host, so
+    /// callers that target a specific account must make it active first and
+    /// restore the previous default afterwards.
+    pub async fn refresh_scope_cancellable<F>(
+        &self,
+        host: &str,
+        scope: &str,
+        on_event: F,
+        cancel: oneshot::Receiver<()>,
+    ) -> Result<(), GhError>
+    where
+        F: Fn(GhLoginEvent) + Send + Sync + 'static,
+    {
+        validate_host(host)?;
+        validate_scope(scope)?;
+        self.browser_auth(
+            &["auth", "refresh", "--hostname", host, "--scopes", scope],
+            on_event,
+            async move {
+                let _ = cancel.await;
+            },
+        )
+        .await
+    }
+
+    async fn browser_auth<F, C>(&self, args: &[&str], on_event: F, cancel: C) -> Result<(), GhError>
     where
         F: Fn(GhLoginEvent) + Send + Sync + 'static,
         C: std::future::Future<Output = ()> + Send,
@@ -213,22 +266,14 @@ impl GhRunner {
 
         let mut command = Command::new(&self.gh_path);
         command
-            .args([
-                "auth",
-                "login",
-                "--hostname",
-                "github.com",
-                "--git-protocol",
-                "https",
-                "--web",
-            ])
+            .args(args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
         configure_background_process(&mut command);
 
-        tracing::debug!("starting GitHub CLI browser login");
+        tracing::debug!(args = ?args, "starting GitHub CLI browser authorization");
         let mut child = command.spawn().map_err(|e| GhError::Spawn(e.to_string()))?;
 
         // GitHub CLI deliberately pauses after printing/copying the device
@@ -281,7 +326,7 @@ impl GhRunner {
         if !status.success() {
             return Err(GhError::Exit {
                 code: status.code().unwrap_or(-1),
-                message: "GitHub browser login was cancelled or failed".to_string(),
+                message: "GitHub browser authorization was cancelled or failed".to_string(),
             });
         }
         Ok(())
@@ -348,13 +393,42 @@ fn extract_device_code(line: &str) -> Option<String> {
 /// Hostnames and logins become command arguments — validate them so a
 /// malicious value can never become a flag (e.g. "--help") or contain
 /// whitespace surprises.
+fn sane_argument(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+fn validate_host(host: &str) -> Result<(), GhError> {
+    if sane_argument(host) {
+        Ok(())
+    } else {
+        Err(GhError::TokenUnavailable {
+            host: host.to_string(),
+            login: String::new(),
+        })
+    }
+}
+
+/// Only the exact scopes Shehata Git asks for may reach the GitHub CLI. This
+/// keeps a future caller from widening an account's permissions by accident.
+fn validate_scope(scope: &str) -> Result<(), GhError> {
+    const ALLOWED: [&str; 1] = ["workflow"];
+    if ALLOWED.contains(&scope) {
+        Ok(())
+    } else {
+        Err(GhError::Exit {
+            code: -1,
+            message: format!("unsupported GitHub scope request: {scope}"),
+        })
+    }
+}
+
 fn validate_host_and_login(host: &str, login: &str) -> Result<(), GhError> {
     fn sane(value: &str) -> bool {
-        !value.is_empty()
-            && !value.starts_with('-')
-            && value
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        sane_argument(value)
     }
     if !sane(host) || !sane(login) {
         return Err(GhError::TokenUnavailable {

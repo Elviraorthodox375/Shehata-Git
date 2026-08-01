@@ -138,6 +138,41 @@ async fn accounts_switch(
 }
 
 #[tauri::command]
+async fn accounts_grant_scope(
+    cancellation: tauri::State<'_, LoginCancellation>,
+    request: core_accounts::GrantScopeRequest,
+    on_event: tauri::ipc::Channel<GhLoginEvent>,
+) -> Result<Vec<shehata_core::AccountInfo>, String> {
+    let gh = GhRunner::locate()
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let progress = on_event.clone();
+    let (cancel_tx, cancel_rx) = oneshot::channel();
+    if let Ok(mut pending) = cancellation.0.lock() {
+        if let Some(previous) = pending.replace(cancel_tx) {
+            let _ = previous.send(());
+        }
+    }
+    let result = core_accounts::grant_scope(
+        &gh,
+        &request,
+        move |event| {
+            let _ = progress.send(event);
+        },
+        cancel_rx,
+    )
+    .await;
+    if let Ok(mut pending) = cancellation.0.lock() {
+        pending.take();
+    }
+    let accounts =
+        result.map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    if let Ok(db) = open_db() {
+        core_accounts::mirror_accounts(&db, &accounts);
+    }
+    Ok(accounts)
+}
+
+#[tauri::command]
 async fn repositories_list() -> Result<Vec<core_repositories::RepositorySummary>, String> {
     core_repositories::list_repository_summaries_with_routing()
         .await
@@ -365,6 +400,7 @@ pub fn run() {
             accounts_cancel_login,
             accounts_remove,
             accounts_switch,
+            accounts_grant_scope,
             repositories_list,
             repositories_add,
             repositories_assign,

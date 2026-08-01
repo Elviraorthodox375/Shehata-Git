@@ -1,5 +1,12 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
-import type { AuditEvent, DoctorReport, GhAccount, GhLoginEvent, RepositorySummary } from "./types";
+import type {
+  AccountScopeRepair,
+  AuditEvent,
+  DoctorReport,
+  GhAccount,
+  GhLoginEvent,
+  RepositorySummary,
+} from "./types";
 
 /**
  * Thin wrappers around Tauri commands.
@@ -45,6 +52,14 @@ export function removeAccount(account: Pick<GhAccount, "host" | "login">): Promi
 
 export function switchAccount(account: Pick<GhAccount, "host" | "login">): Promise<GhAccount[]> {
   return invoke<GhAccount[]>("accounts_switch", { request: account });
+}
+
+export function grantAccountScope(
+  request: AccountScopeRepair,
+  onEvent: (event: GhLoginEvent) => void,
+): Promise<GhAccount[]> {
+  const channel = new Channel<GhLoginEvent>(onEvent);
+  return invoke<GhAccount[]>("accounts_grant_scope", { request, onEvent: channel });
 }
 
 export function listRepositories(): Promise<RepositorySummary[]> {

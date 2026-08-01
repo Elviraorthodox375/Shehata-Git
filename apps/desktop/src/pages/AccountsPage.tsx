@@ -373,9 +373,12 @@ interface AccountLoginDialogProps {
   onClose: () => void;
   onCancel: () => void;
   canceling: boolean;
+  /** Overrides for reuse when authorizing something other than a new sign-in. */
+  title?: string;
+  description?: string;
 }
 
-function AccountLoginDialog({
+export function AccountLoginDialog({
   event,
   pending,
   success,
@@ -383,6 +386,8 @@ function AccountLoginDialog({
   onClose,
   onCancel,
   canceling,
+  title = "Sign in with GitHub",
+  description = "Authentication happens on GitHub. Shehata Git never sees your password or stores your token.",
 }: AccountLoginDialogProps) {
   const code = event?.type === "code" ? event.code : null;
   const [browserError, setBrowserError] = useState<string | null>(null);
@@ -481,12 +486,9 @@ function AccountLoginDialog({
             </div>
             <div>
               <h2 id="github-login-title" className="font-semibold">
-                Sign in with GitHub
+                {title}
               </h2>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                Authentication happens on GitHub. Shehata Git never sees your password or stores
-                your token.
-              </p>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
             </div>
           </div>
         </div>

@@ -14,6 +14,8 @@ export interface SystemCheck {
   /** Simple repair instruction shown when the check is not ready. */
   repair_hint: string | null;
   version: string | null;
+  /** Accounts this check can repair in place, so the UI can offer a button. */
+  repairable_accounts?: AccountScopeRepair[];
 }
 
 export interface DoctorReport {
@@ -28,6 +30,12 @@ export interface GhAccount {
   login: string;
   active: boolean;
   token_available: boolean;
+}
+
+export interface AccountScopeRepair {
+  host: string;
+  login: string;
+  scope: string;
 }
 
 export type GhLoginEvent =

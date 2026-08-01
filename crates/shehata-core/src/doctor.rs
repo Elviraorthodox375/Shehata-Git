@@ -9,7 +9,7 @@ use shehata_git::GitRunner;
 use shehata_github::GhRunner;
 use shehata_storage::Database;
 
-use crate::models::{CheckStatus, DoctorReport, SystemCheck};
+use crate::models::{AccountScopeRepair, CheckStatus, DoctorReport, SystemCheck};
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -145,11 +145,11 @@ impl Doctor {
                         None,
                     )
                 } else {
-                    let missing_workflow: Vec<String> = status
+                    let repairs: Vec<AccountScopeRepair> = status
                         .hosts
-                        .values()
-                        .flatten()
-                        .filter(|account| {
+                        .iter()
+                        .flat_map(|(host, entries)| entries.iter().map(move |entry| (host, entry)))
+                        .filter(|(_, account)| {
                             account.token_usable()
                                 && !account.scopes.trim().is_empty()
                                 && !account
@@ -157,8 +157,14 @@ impl Doctor {
                                     .split(',')
                                     .any(|scope| scope.trim() == "workflow")
                         })
-                        .map(|account| format!("@{}", account.login))
+                        .map(|(host, account)| AccountScopeRepair {
+                            host: host.clone(),
+                            login: account.login.clone(),
+                            scope: "workflow".to_string(),
+                        })
                         .collect();
+                    let missing_workflow: Vec<String> =
+                        repairs.iter().map(|r| format!("@{}", r.login)).collect();
                     if missing_workflow.is_empty() {
                         SystemCheck::ready(
                             "gh-accounts",
@@ -178,9 +184,10 @@ impl Doctor {
                                 if count == 1 { "" } else { "s" },
                                 missing_workflow.join(", ")
                             ),
-                            "Make the listed account active, then run: gh auth refresh -h github.com -s workflow — repeat per account.",
+                            "Choose Grant workflow access to approve it in the browser. Shehata Git restores your CLI default account afterwards.",
                             None,
                         )
+                        .repairing(repairs)
                     }
                 }
             }
