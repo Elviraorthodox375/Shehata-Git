@@ -9,6 +9,9 @@ use shehata_git::{
     parse_remote_url, DiscoveredRepository, GitRunner, RemoteProtocol, RepositoryRemote,
 };
 use shehata_storage::{queries, Database, RepositoryRecord};
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use uuid::Uuid;
 
 use crate::Result;
@@ -126,22 +129,49 @@ pub async fn list_repository_summaries_with_routing() -> Result<Vec<RepositorySu
     let mut repositories = list_repository_summaries(&db)?;
     drop(db);
     let git = GitRunner::locate()?;
-    for repository in &mut repositories {
-        let path = std::path::Path::new(&repository.canonical_path);
-        let helpers = shehata_git::read_local_config_values(&git, path, "credential.helper")
-            .await
-            .unwrap_or_default();
-        let use_http_path =
-            shehata_git::read_local_config_values(&git, path, "credential.useHttpPath")
-                .await
-                .unwrap_or_default();
-        repository.routing_configured = helpers.first().is_some_and(String::is_empty)
-            && helpers
-                .iter()
-                .any(|helper| helper.contains(&format!("--repo-id {}", repository.id)))
-            && use_http_path.iter().any(|value| value == "true");
+    let concurrency = Arc::new(Semaphore::new(4));
+    let mut checks = JoinSet::new();
+
+    for (index, repository) in repositories.iter().enumerate() {
+        let git = git.clone();
+        let repository_id = repository.id.clone();
+        let path = std::path::PathBuf::from(&repository.canonical_path);
+        let permit = Arc::clone(&concurrency);
+        checks.spawn(async move {
+            let _permit = permit.acquire_owned().await.ok();
+            let (helpers, use_http_path) = tokio::join!(
+                shehata_git::read_local_config_values(&git, &path, "credential.helper"),
+                shehata_git::read_local_config_values(&git, &path, "credential.useHttpPath")
+            );
+            (
+                index,
+                routing_is_configured(
+                    &repository_id,
+                    &helpers.unwrap_or_default(),
+                    &use_http_path.unwrap_or_default(),
+                ),
+            )
+        });
+    }
+
+    while let Some(result) = checks.join_next().await {
+        if let Ok((index, configured)) = result {
+            repositories[index].routing_configured = configured;
+        }
     }
     Ok(repositories)
+}
+
+fn routing_is_configured(
+    repository_id: &str,
+    helpers: &[String],
+    use_http_path: &[String],
+) -> bool {
+    helpers.first().is_some_and(String::is_empty)
+        && helpers
+            .iter()
+            .any(|helper| helper.contains(&format!("--repo-id {repository_id}")))
+        && use_http_path.iter().any(|value| value == "true")
 }
 
 pub fn repository_summary(db: &Database, repo: RepositoryRecord) -> Result<RepositorySummary> {
@@ -233,5 +263,24 @@ mod tests {
         assert_eq!(second.id, first.id);
         assert_eq!(second.current_branch.as_deref(), Some("feature/test"));
         assert_eq!(queries::list_repositories(&db).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn detects_complete_repository_routing_configuration() {
+        let helpers = vec![
+            String::new(),
+            "!\"C:/Program Files/Shehata Git/git-credential-shehata.exe\" --repo-id repo-1"
+                .to_string(),
+        ];
+        assert!(routing_is_configured(
+            "repo-1",
+            &helpers,
+            &["true".to_string()]
+        ));
+        assert!(!routing_is_configured(
+            "repo-2",
+            &helpers,
+            &["true".to_string()]
+        ));
     }
 }

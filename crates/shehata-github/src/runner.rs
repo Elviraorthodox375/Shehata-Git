@@ -9,6 +9,7 @@ use serde::Serialize;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
 use tokio::process::Command;
+use tokio::sync::oneshot;
 
 use crate::models::GhAuthStatus;
 
@@ -50,6 +51,8 @@ pub enum GhError {
     Spawn(String),
     #[error("gh command timed out after {0} seconds")]
     Timeout(u64),
+    #[error("GitHub browser login was cancelled")]
+    Cancelled,
     #[error("gh exited with code {code}: {message}")]
     Exit { code: i32, message: String },
     #[error("gh output was not valid UTF-8")]
@@ -162,6 +165,30 @@ impl GhRunner {
     where
         F: Fn(GhLoginEvent) + Send + Sync + 'static,
     {
+        self.login_web_inner(on_event, std::future::pending()).await
+    }
+
+    /// Start browser login and stop the spawned GitHub CLI process when the
+    /// caller sends a cancellation signal.
+    pub async fn login_web_cancellable<F>(
+        &self,
+        on_event: F,
+        cancel: oneshot::Receiver<()>,
+    ) -> Result<(), GhError>
+    where
+        F: Fn(GhLoginEvent) + Send + Sync + 'static,
+    {
+        self.login_web_inner(on_event, async move {
+            let _ = cancel.await;
+        })
+        .await
+    }
+
+    async fn login_web_inner<F, C>(&self, on_event: F, cancel: C) -> Result<(), GhError>
+    where
+        F: Fn(GhLoginEvent) + Send + Sync + 'static,
+        C: std::future::Future<Output = ()> + Send,
+    {
         let on_event: Arc<dyn Fn(GhLoginEvent) + Send + Sync> = Arc::new(on_event);
         on_event(GhLoginEvent::Started);
 
@@ -211,10 +238,24 @@ impl GhRunner {
         let stdout_task = tokio::spawn(read_login_stream(stdout, Arc::clone(&on_event)));
         let stderr_task = tokio::spawn(read_login_stream(stderr, Arc::clone(&on_event)));
 
-        let status = tokio::time::timeout(LOGIN_TIMEOUT, child.wait())
-            .await
-            .map_err(|_| GhError::Timeout(LOGIN_TIMEOUT.as_secs()))?
-            .map_err(|e| GhError::Spawn(e.to_string()))?;
+        tokio::pin!(cancel);
+        let status = tokio::select! {
+            result = child.wait() => result.map_err(|e| GhError::Spawn(e.to_string()))?,
+            _ = &mut cancel => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                stdout_task.abort();
+                stderr_task.abort();
+                return Err(GhError::Cancelled);
+            }
+            _ = tokio::time::sleep(LOGIN_TIMEOUT) => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                stdout_task.abort();
+                stderr_task.abort();
+                return Err(GhError::Timeout(LOGIN_TIMEOUT.as_secs()));
+            }
+        };
         let _ = stdout_task.await;
         let _ = stderr_task.await;
 
@@ -355,6 +396,31 @@ mod tests {
             code: "TEST-1234".to_string(),
         }));
         assert_eq!(events.len(), 3, "raw gh lines must never become events");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn browser_login_can_be_cancelled_without_leaving_gh_running() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake_gh = dir.path().join("gh.cmd");
+        std::fs::write(
+            &fake_gh,
+            "@echo off\r\npowershell -NoProfile -Command \"$line = [Console]::In.ReadLine(); Start-Sleep -Seconds 30\"\r\n",
+        )
+        .unwrap();
+
+        let (cancel_tx, cancel_rx) = oneshot::channel();
+        let runner = GhRunner::with_path(fake_gh);
+        let login =
+            tokio::spawn(async move { runner.login_web_cancellable(|_| {}, cancel_rx).await });
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        cancel_tx.send(()).unwrap();
+
+        let result = tokio::time::timeout(Duration::from_secs(3), login)
+            .await
+            .expect("cancel should stop the child promptly")
+            .unwrap();
+        assert!(matches!(result, Err(GhError::Cancelled)));
     }
 
     #[cfg(target_os = "windows")]

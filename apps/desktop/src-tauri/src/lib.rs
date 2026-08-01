@@ -7,11 +7,18 @@
 use serde::Serialize;
 use shehata_core::{
     accounts as core_accounts, actions as core_actions, agents as core_agents,
-    assignment as core_assignment, prerequisites as core_prerequisites,
+    assignment as core_assignment, audit as core_audit, prerequisites as core_prerequisites,
     repositories as core_repositories, routing as core_routing, Doctor,
 };
 use shehata_github::{GhLoginEvent, GhRunner};
-use shehata_storage::{queries, Database};
+use shehata_storage::Database;
+use tauri::Manager;
+use tokio::sync::oneshot;
+
+const APP_WINDOW_ICON: tauri::image::Image<'_> = tauri::include_image!("./icons/128x128.png");
+
+#[derive(Default)]
+struct LoginCancellation(std::sync::Mutex<Option<oneshot::Sender<()>>>);
 
 #[derive(Debug, Serialize)]
 struct McpInfo {
@@ -54,18 +61,32 @@ async fn accounts_list() -> Result<Vec<shehata_core::AccountInfo>, String> {
 
 #[tauri::command]
 async fn accounts_add(
+    cancellation: tauri::State<'_, LoginCancellation>,
     on_event: tauri::ipc::Channel<GhLoginEvent>,
 ) -> Result<Vec<shehata_core::AccountInfo>, String> {
     let gh = GhRunner::locate()
         .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
     let progress = on_event.clone();
-    gh.login_web(move |event| {
-        // The window may close while gh is waiting. A disconnected progress
-        // channel must not turn a successful browser login into a failure.
-        let _ = progress.send(event);
-    })
-    .await
-    .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let (cancel_tx, cancel_rx) = oneshot::channel();
+    if let Ok(mut pending) = cancellation.0.lock() {
+        if let Some(previous) = pending.replace(cancel_tx) {
+            let _ = previous.send(());
+        }
+    }
+    let login_result = gh
+        .login_web_cancellable(
+            move |event| {
+                // The window may close while gh is waiting. A disconnected progress
+                // channel must not turn a successful browser login into a failure.
+                let _ = progress.send(event);
+            },
+            cancel_rx,
+        )
+        .await;
+    if let Ok(mut pending) = cancellation.0.lock() {
+        pending.take();
+    }
+    login_result.map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
 
     let accounts = core_accounts::list_accounts(&gh)
         .await
@@ -74,6 +95,16 @@ async fn accounts_add(
         core_accounts::mirror_accounts(&db, &accounts);
     }
     Ok(accounts)
+}
+
+#[tauri::command]
+fn accounts_cancel_login(cancellation: tauri::State<'_, LoginCancellation>) -> bool {
+    cancellation
+        .0
+        .lock()
+        .ok()
+        .and_then(|mut pending| pending.take())
+        .is_some_and(|sender| sender.send(()).is_ok())
 }
 
 #[tauri::command]
@@ -229,7 +260,21 @@ fn repositories_set_push_policy(
 #[tauri::command]
 fn audit_list() -> Result<Vec<shehata_storage::AuditEventRecord>, String> {
     let db = open_db()?;
-    queries::list_audit_events(&db, 200)
+    shehata_storage::queries::list_audit_events(&db, 200)
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+fn audit_delete(id: i64) -> Result<bool, String> {
+    let db = open_db()?;
+    core_audit::delete_event(&db, id)
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+fn audit_clear() -> Result<usize, String> {
+    let db = open_db()?;
+    core_audit::clear_history(&db)
         .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
 }
 
@@ -284,14 +329,25 @@ fn locate_mcp_binary() -> Option<std::path::PathBuf> {
 pub fn run() {
     init_tracing();
     tauri::Builder::default()
+        .manage(LoginCancellation::default())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // Windows caches taskbar icons by AppUserModelID across upgrades.
+            // Setting the live window icon keeps rebranded installs correct
+            // immediately, without asking users to clear Explorer caches.
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_icon(APP_WINDOW_ICON.clone())?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             doctor_run,
             prerequisites_install,
             accounts_list,
             accounts_add,
+            accounts_cancel_login,
             accounts_remove,
             repositories_list,
             repositories_add,
@@ -309,6 +365,8 @@ pub fn run() {
             repositories_push,
             repositories_set_push_policy,
             audit_list,
+            audit_delete,
+            audit_clear,
             mcp_info,
             diagnostics_report,
             repositories_generate_agents,

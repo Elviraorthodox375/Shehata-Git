@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock3,
@@ -6,20 +6,41 @@ import {
   ScrollText,
   Search,
   ShieldCheck,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { listAuditEvents } from "@/lib/tauri";
+import { clearAuditEvents, deleteAuditEvent, listAuditEvents } from "@/lib/tauri";
+import type { AuditEvent } from "@/lib/types";
 
 type ResultFilter = "all" | "success" | "failed";
 
 export function ActivityPage() {
+  const queryClient = useQueryClient();
   const events = useQuery({ queryKey: ["audit"], queryFn: listAuditEvents });
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<ResultFilter>("all");
+  const [deleteTarget, setDeleteTarget] = useState<AuditEvent | "all" | null>(null);
+  const removeOne = useMutation({
+    mutationFn: deleteAuditEvent,
+    onSuccess: (_removed, id) => {
+      queryClient.setQueryData<AuditEvent[]>(["audit"], (current) =>
+        current?.filter((event) => event.id !== id),
+      );
+      setDeleteTarget(null);
+    },
+  });
+  const clearAll = useMutation({
+    mutationFn: clearAuditEvents,
+    onSuccess: () => {
+      queryClient.setQueryData<AuditEvent[]>(["audit"], []);
+      setDeleteTarget(null);
+    },
+  });
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (events.data ?? []).filter((event) => {
@@ -90,6 +111,15 @@ export function ActivityPage() {
           <RefreshCw className={events.isFetching ? "animate-spin" : undefined} aria-hidden />{" "}
           Refresh
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => setDeleteTarget("all")}
+          disabled={!events.data?.length || clearAll.isPending || removeOne.isPending}
+        >
+          <Trash2 aria-hidden /> Clear history
+        </Button>
       </div>
 
       {events.isError && (
@@ -146,15 +176,48 @@ export function ActivityPage() {
                     {event.account_login ? ` · @${event.account_login}` : ""}
                   </p>
                 </div>
-                <time className="flex shrink-0 items-center gap-1.5 font-mono text-[0.68rem] text-muted-foreground">
-                  <Clock3 className="h-3 w-3" aria-hidden />
-                  {new Date(event.timestamp).toLocaleString()}
-                </time>
+                <div className="flex shrink-0 items-center gap-2">
+                  <time className="flex items-center gap-1.5 font-mono text-[0.68rem] text-muted-foreground">
+                    <Clock3 className="h-3 w-3" aria-hidden />
+                    {new Date(event.timestamp).toLocaleString()}
+                  </time>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteTarget(event)}
+                    disabled={clearAll.isPending || removeOne.isPending}
+                    className="flex h-9 w-9 items-center justify-center rounded-[0.5rem] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                    aria-label={`Delete ${event.summary}`}
+                    title="Delete this event"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </button>
+                </div>
               </div>
             </article>
           );
         })}
       </div>
+
+      {deleteTarget && (
+        <ConfirmDialog
+          eyebrow={deleteTarget === "all" ? "Clear local history" : "Delete local event"}
+          title={deleteTarget === "all" ? "Clear all activity?" : "Delete this activity event?"}
+          description={
+            deleteTarget === "all"
+              ? `This permanently removes all ${events.data?.length ?? 0} redacted events from this PC.`
+              : "This permanently removes the selected redacted event from this PC."
+          }
+          detail="This does not change repositories, accounts, commits, or anything on GitHub."
+          confirmLabel={deleteTarget === "all" ? "Clear all history" : "Delete event"}
+          pendingLabel="Deleting…"
+          pending={clearAll.isPending || removeOne.isPending}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            if (deleteTarget === "all") clearAll.mutate();
+            else removeOne.mutate(deleteTarget.id);
+          }}
+        />
+      )}
     </div>
   );
 }

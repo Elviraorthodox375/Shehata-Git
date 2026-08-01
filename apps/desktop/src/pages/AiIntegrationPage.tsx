@@ -3,19 +3,24 @@ import {
   Bot,
   Check,
   CheckCircle2,
+  ChevronDown,
   Copy,
   FileCode2,
+  FolderGit2,
   Loader2,
   Radar,
+  Search,
   ShieldCheck,
   TerminalSquare,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { generateRepositoryAgents, getMcpInfo, listRepositories } from "@/lib/tauri";
+import type { RepositorySummary } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 const PERMISSIONS = [
   ["Inspect", "Repository status and branch metadata"],
@@ -167,25 +172,15 @@ export function AiIntegrationPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row">
-            <select
-              value={selectedId}
-              onChange={(event) => {
-                setRepositoryId(event.target.value);
+            <RepositoryPicker
+              repositories={repositories.data ?? []}
+              selectedId={selectedId}
+              onSelect={(id) => {
+                setRepositoryId(id);
                 generateAgents.reset();
               }}
               disabled={!repositories.data?.length || generateAgents.isPending}
-              className="glass-input h-11 min-w-0 flex-1 rounded-[0.65rem] px-3 text-sm outline-none focus:border-primary"
-            >
-              {repositories.data?.length ? (
-                repositories.data.map((repository) => (
-                  <option key={repository.id} value={repository.id}>
-                    {repository.display_name} — {repository.canonical_path}
-                  </option>
-                ))
-              ) : (
-                <option value="">No registered repositories</option>
-              )}
-            </select>
+            />
             <Button
               onClick={() => generateAgents.mutate(selectedId)}
               disabled={!selectedId || generateAgents.isPending}
@@ -212,6 +207,134 @@ export function AiIntegrationPage() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function RepositoryPicker({
+  repositories,
+  selectedId,
+  onSelect,
+  disabled,
+}: {
+  repositories: RepositorySummary[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selected = repositories.find((repository) => repository.id === selectedId);
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return repositories;
+    return repositories.filter((repository) =>
+      [repository.display_name, repository.canonical_path, repository.owner, repository.repo_name]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(needle)),
+    );
+  }, [repositories, search]);
+
+  return (
+    <div className="relative min-w-0 flex-1">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={cn(
+          "glass-input flex min-h-11 w-full items-center gap-3 rounded-[0.65rem] px-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50",
+          open && "border-primary/55 shadow-[0_0_0_3px_hsl(var(--primary)/0.1)]",
+        )}
+      >
+        <FolderGit2 className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold">
+            {selected?.display_name ?? "No registered repositories"}
+          </span>
+          {selected && (
+            <span className="block truncate font-mono text-[0.65rem] text-muted-foreground">
+              {selected.canonical_path}
+            </span>
+          )}
+        </span>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 overflow-hidden rounded-[0.8rem] border border-white/10 bg-surface-elevated/95 shadow-[0_24px_70px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
+          <div className="border-b border-white/10 p-2.5">
+            <label className="glass-input flex min-h-11 items-center gap-2.5 px-3">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="sr-only">Search repositories</span>
+              <input
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search repositories…"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/55 [&::-webkit-search-cancel-button]:hidden"
+              />
+              <span className="font-mono text-[0.65rem] text-muted-foreground/60">
+                {filtered.length}/{repositories.length}
+              </span>
+            </label>
+          </div>
+          <div className="scrollbar-thin max-h-64 overflow-y-auto p-2" role="listbox">
+            {filtered.length ? (
+              filtered.map((repository) => {
+                const active = repository.id === selectedId;
+                return (
+                  <button
+                    key={repository.id}
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => {
+                      onSelect(repository.id);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                    className={cn(
+                      "flex min-h-14 w-full items-center gap-3 rounded-[0.6rem] px-3 py-2 text-left transition-colors",
+                      active
+                        ? "bg-primary/[0.11] text-foreground"
+                        : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground",
+                    )}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.55rem] border border-white/10 bg-background/30">
+                      <FolderGit2 className="h-4 w-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">
+                        {repository.display_name}
+                      </span>
+                      <span className="block truncate font-mono text-[0.65rem] text-muted-foreground">
+                        {repository.canonical_path}
+                      </span>
+                    </span>
+                    {active && (
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <Check className="h-3.5 w-3.5" aria-hidden />
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            ) : (
+              <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                No repository matches “{search}”.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

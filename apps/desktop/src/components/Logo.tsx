@@ -6,49 +6,15 @@ interface LogoMarkProps {
   size?: number;
 }
 
-/**
- * Shehata Git brand mark.
- * An "S" trunk carries identity nodes; two source lines converge from the
- * left into the single correct path — multiple identities, one repository.
- */
 export function LogoMark({ className, size = 32 }: LogoMarkProps) {
   return (
-    <svg
-      viewBox="0 0 64 64"
+    <img
+      src="/logo-mark.svg"
       width={size}
       height={size}
-      fill="none"
-      role="img"
-      aria-label="Shehata Git logo"
-      className={cn("shrink-0", className)}
-    >
-      <g stroke="currentColor" strokeLinecap="round">
-        <path d="M11 12 L23 21.5" strokeWidth="3" />
-        <path d="M11 26 L20 27.5" strokeWidth="3" />
-        <path
-          d="M44 18.5 C36.5 11.5 21.5 13 20.5 23 C19.5 33 45 31.5 45 42 C45 52.5 28 55.5 20 46"
-          strokeWidth="6"
-        />
-      </g>
-      <circle cx="11" cy="12" r="3.6" fill="currentColor" />
-      <circle cx="11" cy="26" r="3.6" fill="currentColor" />
-      <circle
-        cx="20.5"
-        cy="23"
-        r="4.2"
-        className="fill-background"
-        stroke="currentColor"
-        strokeWidth="2.6"
-      />
-      <circle
-        cx="45"
-        cy="42"
-        r="4.2"
-        className="fill-background"
-        stroke="currentColor"
-        strokeWidth="2.6"
-      />
-    </svg>
+      alt="Shehata Git"
+      className={cn("shrink-0 object-contain", className)}
+    />
   );
 }
 
@@ -61,7 +27,7 @@ export function LogoLockup({ className, showTagline = false }: LogoLockupProps) 
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <span className="flex h-9 w-9 items-center justify-center border border-primary/25 bg-primary/[0.06]">
-        <LogoMark size={27} className="text-primary" />
+        <LogoMark size={27} />
       </span>
       <div className="flex flex-col">
         <span className="font-display text-[1.05rem] font-semibold leading-tight tracking-[-0.025em]">

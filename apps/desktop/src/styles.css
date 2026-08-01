@@ -243,9 +243,25 @@ html[data-transparency="reduced"] .instrument-panel {
   backdrop-filter: none;
 }
 
-html[data-density="compact"] .density-pad {
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
+html[data-density="compact"] .workspace-scroll {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+html[data-density="compact"] .density-card-header {
+  padding: 1rem;
+}
+
+html[data-density="compact"] .density-card-content {
+  padding-right: 1rem;
+  padding-bottom: 1rem;
+  padding-left: 1rem;
+}
+
+html[data-density="compact"] .density-card-footer {
+  padding-right: 1rem;
+  padding-bottom: 1rem;
+  padding-left: 1rem;
 }
 
 @media (pointer: coarse) {

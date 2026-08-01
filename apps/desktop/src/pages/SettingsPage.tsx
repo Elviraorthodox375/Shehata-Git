@@ -102,10 +102,10 @@ export function SettingsPage({
           <CardHeader>
             <div className="flex items-center gap-2">
               <Gauge className="h-4 w-4 text-primary" aria-hidden />
-              <CardTitle>Workspace density</CardTitle>
+              <CardTitle>Layout spacing</CardTitle>
             </div>
             <CardDescription>
-              Control how much information fits without changing font size.
+              Choose how tightly cards are spaced. Text size and features stay exactly the same.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -114,14 +114,14 @@ export function SettingsPage({
                 selected={density === "comfortable"}
                 icon={GlassWater}
                 label="Comfortable"
-                detail="More breathing room"
+                detail="Larger cards · easier to scan"
                 onClick={() => onDensityChange("comfortable")}
               />
               <ChoiceButton
                 selected={density === "compact"}
                 icon={Gauge}
                 label="Compact"
-                detail="More data visible"
+                detail="Tighter cards · longer lists"
                 onClick={() => onDensityChange("compact")}
               />
             </SettingGroup>
@@ -187,7 +187,7 @@ export function SettingsPage({
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>Normal pushes only. Force push and remote deletion are never exposed.</p>
             <p>Tokens stay in GitHub CLI and are never written to the Shehata Git database.</p>
-            <p className="font-mono text-xs">Shehata Git v0.1.4 · Local-first · MIT</p>
+            <p className="font-mono text-xs">Shehata Git v0.1.5 · Local-first · MIT</p>
           </CardContent>
         </Card>
       </div>

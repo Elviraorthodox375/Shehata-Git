@@ -9,7 +9,11 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
-      staleTime: 15_000,
+      // GitHub CLI and repository routing checks launch local processes. Keep
+      // successful reads warm while navigating; mutations still invalidate the
+      // exact data they change and every registry page keeps a manual refresh.
+      staleTime: 60_000,
+      gcTime: 15 * 60_000,
     },
   },
 });

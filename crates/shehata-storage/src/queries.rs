@@ -422,6 +422,16 @@ pub fn list_audit_events(db: &Database, limit: i64) -> Result<Vec<AuditEventReco
     Ok(rows)
 }
 
+pub fn delete_audit_event(db: &Database, id: i64) -> Result<usize, StorageError> {
+    Ok(db
+        .connection()
+        .execute("DELETE FROM audit_events WHERE id = ?1", params![id])?)
+}
+
+pub fn clear_audit_events(db: &Database) -> Result<usize, StorageError> {
+    Ok(db.connection().execute("DELETE FROM audit_events", [])?)
+}
+
 // ---------------------------------------------------------------- settings
 
 pub fn get_setting(db: &Database, key: &str) -> Result<Option<String>, StorageError> {
@@ -569,6 +579,32 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].summary, "Tested connection for example");
         assert_eq!(events[0].exit_code, Some(0));
+
+        let id = events[0].id;
+        assert_eq!(delete_audit_event(&db, id).unwrap(), 1);
+        assert!(list_audit_events(&db, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clear_audit_history() {
+        let db = Database::open_in_memory().unwrap();
+        for summary in ["First", "Second"] {
+            insert_audit_event(
+                &db,
+                &crate::records::NewAuditEvent {
+                    event_type: "test",
+                    repository_id: None,
+                    account_login: None,
+                    summary,
+                    result: "success",
+                    exit_code: Some(0),
+                    duration_ms: None,
+                },
+            )
+            .unwrap();
+        }
+        assert_eq!(clear_audit_events(&db).unwrap(), 2);
+        assert!(list_audit_events(&db, 10).unwrap().is_empty());
     }
 
     #[test]

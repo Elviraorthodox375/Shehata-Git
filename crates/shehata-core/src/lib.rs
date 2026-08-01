@@ -7,6 +7,7 @@ pub mod accounts;
 pub mod actions;
 pub mod agents;
 pub mod assignment;
+pub mod audit;
 pub mod diagnostics;
 pub mod doctor;
 pub mod error;

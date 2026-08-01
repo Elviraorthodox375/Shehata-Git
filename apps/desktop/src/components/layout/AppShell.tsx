@@ -51,7 +51,7 @@ export function AppShell({
             </div>
           </div>
         </header>
-        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-7">
+        <div className="workspace-scroll scrollbar-thin flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-7">
           <div className="animate-fade-in">{children}</div>
         </div>
       </main>

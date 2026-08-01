@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   CheckCircle2,
@@ -15,11 +14,13 @@ import {
   UserRound,
   XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { addAccount, listAccounts, removeAccount } from "@/lib/tauri";
+import { SearchField } from "@/components/ui/SearchField";
+import { addAccount, cancelAccountLogin, listAccounts, removeAccount } from "@/lib/tauri";
 import type { GhAccount, GhLoginEvent } from "@/lib/types";
 
 /**
@@ -30,7 +31,18 @@ export function AccountsPage() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loginEvent, setLoginEvent] = useState<GhLoginEvent | null>(null);
+  const [search, setSearch] = useState("");
+  const [accountToRemove, setAccountToRemove] = useState<GhAccount | null>(null);
+  const [cancelingLogin, setCancelingLogin] = useState(false);
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
+  const filteredAccounts = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return accounts.data ?? [];
+    return (accounts.data ?? []).filter(
+      (account) =>
+        account.login.toLowerCase().includes(needle) || account.host.toLowerCase().includes(needle),
+    );
+  }, [accounts.data, search]);
   const login = useMutation({
     mutationFn: () => addAccount(setLoginEvent),
     onSuccess: (data) => {
@@ -42,6 +54,7 @@ export function AccountsPage() {
     mutationFn: (account: GhAccount) => removeAccount(account),
     onSuccess: (data) => {
       queryClient.setQueryData(["accounts"], data);
+      setAccountToRemove(null);
       void Promise.all([
         queryClient.invalidateQueries({ queryKey: ["doctor"] }),
         queryClient.invalidateQueries({ queryKey: ["repositories"] }),
@@ -56,12 +69,15 @@ export function AccountsPage() {
     login.mutate();
   }
 
-  async function confirmRemoveAccount(account: GhAccount) {
-    const approved = await confirmDialog(
-      `Remove @${account.login} from GitHub CLI on this PC? Repository assignments will stay locked to this identity and cannot push until you sign in again or assign another account. This does not revoke access on GitHub.com.`,
-      { title: "Remove GitHub account", kind: "warning" },
-    );
-    if (approved) remove.mutate(account);
+  async function cancelLogin() {
+    setCancelingLogin(true);
+    try {
+      await cancelAccountLogin();
+      setDialogOpen(false);
+      setLoginEvent(null);
+    } finally {
+      setCancelingLogin(false);
+    }
   }
 
   return (
@@ -107,6 +123,18 @@ export function AccountsPage() {
           />
         </div>
       </section>
+
+      {(accounts.data?.length ?? 0) > 0 && (
+        <div className="liquid-panel rounded-[0.8rem] p-3">
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            label="Search identities"
+            placeholder="Search by GitHub login or host…"
+            resultCount={filteredAccounts.length}
+          />
+        </div>
+      )}
 
       {accounts.isLoading && <p className="text-sm text-muted-foreground">Reading accounts…</p>}
 
@@ -161,8 +189,17 @@ export function AccountsPage() {
         </Card>
       )}
 
+      {!accounts.isLoading && (accounts.data?.length ?? 0) > 0 && filteredAccounts.length === 0 && (
+        <Card>
+          <CardContent className="flex min-h-40 flex-col items-center justify-center text-center">
+            <p className="font-display font-semibold">No matching identities</p>
+            <p className="mt-1 text-sm text-muted-foreground">Try another login or host name.</p>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-3">
-        {accounts.data?.map((account) => {
+        {filteredAccounts.map((account) => {
           const removing =
             remove.isPending &&
             remove.variables?.host === account.host &&
@@ -190,7 +227,10 @@ export function AccountsPage() {
                     size="sm"
                     variant="ghost"
                     className="ml-auto min-h-11 text-muted-foreground hover:text-destructive sm:ml-2 sm:min-h-9"
-                    onClick={() => confirmRemoveAccount(account)}
+                    onClick={() => {
+                      remove.reset();
+                      setAccountToRemove(account);
+                    }}
                     disabled={remove.isPending || login.isPending}
                   >
                     {removing ? (
@@ -214,6 +254,33 @@ export function AccountsPage() {
           success={login.isSuccess}
           error={login.isError ? errorMessage(login.error) : null}
           onClose={() => setDialogOpen(false)}
+          onCancel={cancelLogin}
+          canceling={cancelingLogin}
+        />
+      )}
+
+      {accountToRemove && (
+        <ConfirmDialog
+          eyebrow="Confirm local sign-out"
+          title={`Remove @${accountToRemove.login}?`}
+          description={
+            <>
+              This signs the account out of <strong className="text-foreground">GitHub CLI</strong>{" "}
+              on this PC only. Shehata Git will stop using it immediately.
+            </>
+          }
+          detail={
+            <>
+              Repository assignments stay safely locked. Reassign them or sign in again before the
+              next push. Access is not revoked on GitHub.com.
+            </>
+          }
+          confirmLabel="Remove from this PC"
+          cancelLabel="Keep account"
+          pendingLabel="Removing…"
+          pending={remove.isPending}
+          onCancel={() => setAccountToRemove(null)}
+          onConfirm={() => remove.mutate(accountToRemove)}
         />
       )}
     </div>
@@ -226,15 +293,26 @@ interface AccountLoginDialogProps {
   success: boolean;
   error: string | null;
   onClose: () => void;
+  onCancel: () => void;
+  canceling: boolean;
 }
 
-function AccountLoginDialog({ event, pending, success, error, onClose }: AccountLoginDialogProps) {
+function AccountLoginDialog({
+  event,
+  pending,
+  success,
+  error,
+  onClose,
+  onCancel,
+  canceling,
+}: AccountLoginDialogProps) {
   const code = event?.type === "code" ? event.code : null;
   const [browserError, setBrowserError] = useState<string | null>(null);
   const [browserState, setBrowserState] = useState<"idle" | "opening" | "opened" | "failed">(
     "idle",
   );
   const [copyState, setCopyState] = useState<"idle" | "copying" | "copied" | "failed">("idle");
+  const [manualCopyConfirmed, setManualCopyConfirmed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -287,9 +365,12 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
   async function copyOneTimeCode() {
     if (!code) return;
     setCopyState("copying");
+    setManualCopyConfirmed(false);
     try {
       await writeText(code, { label: "GitHub one-time sign-in code" });
       setCopyState("copied");
+      setManualCopyConfirmed(true);
+      window.setTimeout(() => setManualCopyConfirmed(false), 1800);
     } catch {
       setCopyState("failed");
     }
@@ -367,20 +448,29 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
                 className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
                 aria-live="polite"
               >
-                {copyState === "copied" && (
+                {manualCopyConfirmed ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden />
+                    Copied again — ready to paste.
+                  </>
+                ) : copyState === "copied" ? (
                   <>
                     <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden />
                     Copied — paste it into the GitHub page.
                   </>
-                )}
+                ) : null}
                 {copyState === "copying" && "Copying the code…"}
                 {copyState === "failed" && "Automatic copy failed. Use Copy code below."}
                 {copyState === "idle" && "Copy this code into the GitHub page."}
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <Button type="button" className="min-h-11" onClick={copyOneTimeCode}>
-                  <Copy aria-hidden />
-                  {copyState === "copied" ? "Copy again" : "Copy code"}
+                  {manualCopyConfirmed ? <CheckCircle2 aria-hidden /> : <Copy aria-hidden />}
+                  {manualCopyConfirmed
+                    ? "Copied!"
+                    : copyState === "copied"
+                      ? "Copy again"
+                      : "Copy code"}
                 </Button>
                 <Button type="button" variant="outline" className="min-h-11" onClick={reopenGitHub}>
                   <ExternalLink aria-hidden />
@@ -423,7 +513,18 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
             Authentication stays in GitHub CLI
           </p>
-          {!pending && (
+          {pending ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11 sm:min-h-9"
+              onClick={onCancel}
+              disabled={canceling}
+            >
+              {canceling && <LoaderCircle className="animate-spin" aria-hidden />}
+              {canceling ? "Canceling…" : "Cancel"}
+            </Button>
+          ) : (
             <Button className="min-h-11 sm:min-h-9" onClick={onClose} autoFocus>
               {success ? "Done" : "Close"}
             </Button>

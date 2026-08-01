@@ -5,6 +5,45 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — v0.1.5 scalable workspace UX and official branding
+
+- Adopted the supplied `Logo Shehata Git.svg` as the single brand source,
+  regenerated Windows and macOS bundle icons, updated in-app branding, and set
+  the live Tauri window icon explicitly so Windows taskbar cache cannot retain
+  the previous mark across an upgrade.
+- Replaced native and in-flow repository/account selectors with searchable
+  Liquid Glass popovers. The menus now float above their forms, remain bounded
+  and scrollable for long lists, and no longer push the next section down.
+- Added search to account and repository panels and made repository cards
+  collapsed by default while preserving direct access to their primary actions.
+- Added explicit **Copied!** feedback every time a one-time GitHub code is
+  copied again. Added a real **Cancel** action that terminates the waiting
+  GitHub CLI child process instead of merely hiding its dialog.
+- Replaced the native Windows account-removal prompt with a branded in-app
+  confirmation dialog.
+- Added user-controlled local audit retention: delete one event or clear the
+  complete redacted history, with an in-app confirmation and shared Rust core
+  validation. Repository, account, commit, and GitHub state are untouched.
+- Renamed the ambiguous **Workspace density** control to **Layout spacing**,
+  clarified both choices, and connected compact mode to real card and page
+  spacing without reducing text size or touch targets.
+- Reduced repeated repository refresh latency by checking independent routing
+  state concurrently with a bounded worker count, and extended React Query
+  cache freshness to avoid needless reloads while navigating between panels.
+- Added regression coverage for cancellable browser login and local audit
+  deletion/clearing. Final quality gate passed: formatting, Clippy with warnings
+  denied, all 80 Rust tests, strict TypeScript, and 3 frontend tests. Biome lint
+  and the production Vite build also passed.
+- Bumped the application and installer version to 0.1.5. Built
+  `target/release/bundle/nsis/Shehata Git_0.1.5_x64-setup.exe` (5,395,384 bytes;
+  SHA-256 `E7479ED8F811E412B77A2907A6A94EEF166ACACDEC57A35758683178AC02ABAB`).
+- Installed the 0.1.5 NSIS bundle over the previous version and verified the
+  uninstall registration, `shehata 0.1.5`, all eight Doctor checks ready, three
+  existing GitHub CLI accounts preserved, and the new icon embedded in the
+  installed desktop executable.
+
+---
+
 ## 2026-08-01 — v0.1.4 complete account controls
 
 - Added exact-account removal through shared Rust business logic and GitHub
