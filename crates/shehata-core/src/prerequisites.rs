@@ -80,28 +80,30 @@ pub async fn install_prerequisites(
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+
         let winget = which::which("winget").map_err(|_| ShehataError::PackageManagerMissing)?;
         let mut installed = Vec::with_capacity(ids.len());
 
         for id in ids {
-            let status = tokio::time::timeout(
-                INSTALL_TIMEOUT,
-                Command::new(&winget)
-                    .args(installation_args(id))
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status(),
-            )
-            .await
-            .map_err(|_| ShehataError::PrerequisiteInstallFailed {
-                tool: id.label().to_string(),
-                code: -1,
-            })?
-            .map_err(|_| ShehataError::PrerequisiteInstallFailed {
-                tool: id.label().to_string(),
-                code: -1,
-            })?;
+            let mut command = Command::new(&winget);
+            command
+                .args(installation_args(id))
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            command.as_std_mut().creation_flags(0x0800_0000);
+
+            let status = tokio::time::timeout(INSTALL_TIMEOUT, command.status())
+                .await
+                .map_err(|_| ShehataError::PrerequisiteInstallFailed {
+                    tool: id.label().to_string(),
+                    code: -1,
+                })?
+                .map_err(|_| ShehataError::PrerequisiteInstallFailed {
+                    tool: id.label().to_string(),
+                    code: -1,
+                })?;
 
             if !status.success() {
                 return Err(ShehataError::PrerequisiteInstallFailed {

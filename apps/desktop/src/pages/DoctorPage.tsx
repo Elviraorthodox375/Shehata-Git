@@ -29,7 +29,7 @@ const INSTALLABLE_CHECKS: Record<string, PrerequisiteId> = {
   gh: "github_cli",
 };
 
-function CheckCard({ check }: { check: SystemCheck }) {
+function AttentionCheckCard({ check }: { check: SystemCheck }) {
   const meta = STATUS_META[check.status];
   const Icon = meta.icon;
   return (
@@ -70,12 +70,38 @@ function CheckCard({ check }: { check: SystemCheck }) {
   );
 }
 
+function ReadyCheck({ check }: { check: SystemCheck }) {
+  return (
+    <div className="group flex min-w-0 items-start gap-3 border-b border-border/70 px-4 py-3.5 last:border-b-0 sm:[&:nth-last-child(-n+2)]:border-b-0 sm:[&:nth-child(odd)]:border-r">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-success/25 bg-success/10 text-success">
+        <CheckCircle2 className="h-4 w-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <p className="truncate text-sm font-semibold">{check.label}</p>
+          <span className="shrink-0 font-mono text-[0.65rem] uppercase tracking-wider text-success">
+            Ready
+          </span>
+        </div>
+        <p
+          className="mt-1 truncate text-xs leading-5 text-muted-foreground"
+          title={check.version ?? check.detail}
+        >
+          {check.version ?? check.detail}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function DoctorPage() {
   const queryClient = useQueryClient();
   const doctor = useQuery({ queryKey: ["doctor"], queryFn: runDoctor });
   const installable = (doctor.data?.checks ?? [])
     .filter((check) => check.status !== "ready" && INSTALLABLE_CHECKS[check.id])
     .map((check) => INSTALLABLE_CHECKS[check.id]);
+  const readyChecks = doctor.data?.checks.filter((check) => check.status === "ready") ?? [];
+  const attentionChecks = doctor.data?.checks.filter((check) => check.status !== "ready") ?? [];
   const setup = useMutation({
     mutationFn: installPrerequisites,
     onSuccess: async () => {
@@ -179,11 +205,32 @@ export function DoctorPage() {
         </Card>
       )}
 
-      <div className="grid gap-3">
-        {doctor.data?.checks.map((check) => (
-          <CheckCard key={check.id} check={check} />
-        ))}
-      </div>
+      {attentionChecks.length > 0 && (
+        <div className="grid gap-3">
+          {attentionChecks.map((check) => (
+            <AttentionCheckCard key={check.id} check={check} />
+          ))}
+        </div>
+      )}
+
+      {readyChecks.length > 0 && (
+        <section className="instrument-panel overflow-hidden rounded-[0.8rem]">
+          <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3.5 sm:px-5">
+            <div>
+              <p className="eyebrow">Verified on this machine</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {readyChecks.length} system checks passed
+              </p>
+            </div>
+            <Badge variant="success">All ready</Badge>
+          </div>
+          <div className="grid sm:grid-cols-2">
+            {readyChecks.map((check) => (
+              <ReadyCheck key={check.id} check={check} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

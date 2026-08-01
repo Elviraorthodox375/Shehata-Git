@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   CheckCircle2,
   ExternalLink,
@@ -174,6 +175,16 @@ interface AccountLoginDialogProps {
 
 function AccountLoginDialog({ event, pending, success, error, onClose }: AccountLoginDialogProps) {
   const code = event?.type === "code" ? event.code : null;
+  const [browserError, setBrowserError] = useState<string | null>(null);
+
+  async function reopenGitHub() {
+    setBrowserError(null);
+    try {
+      await openUrl("https://github.com/login/device");
+    } catch (openError) {
+      setBrowserError(errorMessage(openError));
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
@@ -193,8 +204,8 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
                 Sign in with GitHub
               </h2>
               <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                GitHub CLI opens your browser. Shehata Git never sees your password or stores your
-                token.
+                Authentication happens on GitHub. Shehata Git never sees your password or stores
+                your token.
               </p>
             </div>
           </div>
@@ -208,10 +219,13 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
                 aria-hidden
               />
               <div>
-                <p className="text-sm font-medium">Waiting for browser sign-in</p>
+                <p className="text-sm font-medium">
+                  {code ? "Waiting for approval on GitHub" : "Preparing secure browser sign-in"}
+                </p>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  Finish the GitHub page that just opened. Keep this window open while the CLI
-                  verifies your account.
+                  {code
+                    ? "Finish the GitHub page, then return here. Keep this window open while GitHub CLI verifies your account."
+                    : "GitHub CLI is creating a one-time code and opening your default browser."}
                 </p>
               </div>
             </div>
@@ -229,6 +243,20 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
               <p className="mt-2 text-xs text-muted-foreground">
                 The GitHub CLI also copied this code to your clipboard.
               </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-4 min-h-11 w-full"
+                onClick={reopenGitHub}
+              >
+                <ExternalLink aria-hidden />
+                Open GitHub sign-in
+              </Button>
+              {browserError && (
+                <p className="mt-2 text-xs leading-relaxed text-destructive">
+                  Could not open the browser: {browserError}
+                </p>
+              )}
             </div>
           )}
 

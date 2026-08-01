@@ -7,7 +7,7 @@ use std::time::Duration;
 use secrecy::SecretString;
 use serde::Serialize;
 use thiserror::Error;
-use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 use crate::models::GhAuthStatus;
@@ -15,6 +15,21 @@ use crate::models::GhAuthStatus;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 const TOKEN_TIMEOUT: Duration = Duration::from_secs(15);
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// `gh` is a console application, but Shehata Git is not. Keep background
+/// commands attached only to the pipes we explicitly configure instead of
+/// letting Windows create a visible terminal window for them.
+fn configure_background_process(command: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        command.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+    }
+}
 
 /// Curated browser-login progress. Raw gh output never crosses the backend
 /// boundary; only a device code matching GitHub's one-time-code shape may be
@@ -76,6 +91,7 @@ impl GhRunner {
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+        configure_background_process(&mut command);
 
         // Args contain at most a login name — never tokens.
         tracing::debug!(args = ?args, "running gh");
@@ -142,13 +158,30 @@ impl GhRunner {
                 "--web",
                 "--clipboard",
             ])
-            .stdin(std::process::Stdio::null())
+            .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
+        configure_background_process(&mut command);
 
         tracing::debug!("starting GitHub CLI browser login");
         let mut child = command.spawn().map_err(|e| GhError::Spawn(e.to_string()))?;
+
+        // GitHub CLI deliberately pauses after printing/copying the device
+        // code and waits for Enter before it opens the browser and starts
+        // polling for completion. The desktop app has no terminal for the
+        // user to press Enter in, so acknowledge that prompt over stdin.
+        let mut stdin = child.stdin.take().ok_or_else(|| {
+            GhError::Spawn("could not connect to GitHub CLI login input".to_string())
+        })?;
+        stdin
+            .write_all(b"\n")
+            .await
+            .map_err(|e| GhError::Spawn(e.to_string()))?;
+        stdin
+            .shutdown()
+            .await
+            .map_err(|e| GhError::Spawn(e.to_string()))?;
         on_event(GhLoginEvent::WaitingForBrowser);
 
         let stdout = child.stdout.take().ok_or_else(|| {
@@ -286,7 +319,7 @@ mod tests {
         let fake_gh = dir.path().join("gh.cmd");
         std::fs::write(
             &fake_gh,
-            "@echo off\r\necho First copy your one-time code: TEST-1234\r\necho raw diagnostic that must stay private 1>&2\r\nexit /b 0\r\n",
+            "@echo off\r\npowershell -NoProfile -Command \"$line = [Console]::In.ReadLine(); if ($null -eq $line) { exit 7 }; Write-Output 'First copy your one-time code: TEST-1234'; [Console]::Error.WriteLine('raw diagnostic that must stay private')\"\r\n",
         )
         .unwrap();
 

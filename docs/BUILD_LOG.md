@@ -5,6 +5,44 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — v0.1.2 silent background commands and sign-in UX repair
+
+- Diagnosed the GitHub account flow from the live failure state: GitHub CLI
+  produced and copied the device code, then waited for an Enter key before
+  opening the browser and beginning its completion polling. The desktop runner
+  had connected standard input to null, leaving the UI waiting indefinitely.
+- Changed browser login to acknowledge GitHub CLI's fixed Enter prompt over a
+  private pipe. Added a Windows regression test whose fake CLI fails on EOF and
+  succeeds only after receiving the input line.
+- Configured every production Git, GitHub CLI, registry-query, and WinGet child
+  process to use Windows `CREATE_NO_WINDOW`. Background checks and repository
+  actions no longer flash Command Prompt or Terminal windows.
+- Reworded the account dialog so it never claims a page already opened while a
+  code is still being prepared. Added a one-click fallback restricted by Tauri
+  capability scope to the exact official GitHub device-login URL.
+- Compressed successful System Check results into a responsive two-column
+  verified grid while preserving full-size repair cards for actual problems.
+- Corrected the PATH health check to test the real requirement—the credential
+  helper is discoverable from the process or persistent user PATH—instead of
+  requiring the currently running executable's directory. Debug builds no
+  longer report a false machine-health failure when an installed helper is
+  already available.
+- Rebuilt repository cards around a clear information row and separate action
+  rail. Long repository names now retain useful width, branch/remote metadata
+  has consistent containers, and mobile actions use 44-pixel touch targets.
+- Bumped the application and installer version to 0.1.2.
+- Built `target/release/bundle/nsis/Shehata Git_0.1.2_x64-setup.exe`
+  (5,196,230 bytes; SHA-256
+  `2E01D6F9714A504BD17AB0248FA464FDCA1074AE86E2042EF99A11DA398496C3`).
+- Final repository gate passed: workspace formatting, Clippy with warnings
+  denied, all 74 Rust tests, strict TypeScript, 3 frontend tests, and Biome
+  lint.
+- Installed the 0.1.2 NSIS bundle over 0.1.1 and verified the uninstall
+  registration, all shipped executables, `shehata 0.1.2`, and a healthy
+  installed Doctor report with all eight checks ready.
+
+---
+
 ## 2026-08-01 — v0.1.1 automatic Windows setup and installer-state repair
 
 - Diagnosed the owner's misleading PATH warning: an earlier custom-directory

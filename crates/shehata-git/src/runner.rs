@@ -12,6 +12,18 @@ use tokio::process::Command;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn configure_background_process(command: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+
+        command.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum GitError {
     #[error("git executable not found on PATH")]
@@ -103,6 +115,7 @@ impl GitRunner {
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
+        configure_background_process(&mut command);
 
         // Never log the environment; args are safe (no tokens allowed by design).
         tracing::debug!(args = ?full_args, "running git");

@@ -339,7 +339,7 @@ function RepositoryRow({
           repo.assigned_login ? "bg-success" : "bg-warning",
         )}
       />
-      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_15rem_auto] lg:items-center">
+      <div className="grid gap-5 p-5 lg:grid-cols-[minmax(18rem,1.25fr)_minmax(16rem,0.75fr)] lg:items-center">
         <div className="flex min-w-0 items-start gap-4">
           <span className="font-mono text-[0.65rem] text-muted-foreground/50">
             {String(index + 1).padStart(2, "0")}
@@ -347,9 +347,11 @@ function RepositoryRow({
           <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-border bg-background/35">
             <FolderGit2 className="h-4 w-4 text-primary" aria-hidden />
           </div>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-display font-semibold tracking-tight">{repo.display_name}</h3>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h3 className="min-w-0 font-display font-semibold leading-snug tracking-tight">
+                {repo.display_name}
+              </h3>
               {repo.remote_protocol && (
                 <Badge variant={repo.remote_protocol === "https" ? "secondary" : "warning"}>
                   {repo.remote_protocol.toUpperCase()}
@@ -362,12 +364,12 @@ function RepositoryRow({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          <div className="flex min-w-0 items-center gap-2 rounded-[0.55rem] border border-border/70 bg-background/25 px-3 py-2.5 text-xs text-muted-foreground">
             <GitBranch className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="truncate">{repo.current_branch ?? "No commits"}</span>
           </div>
-          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex min-w-0 items-center gap-2 rounded-[0.55rem] border border-border/70 bg-background/25 px-3 py-2.5 text-xs text-muted-foreground">
             <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="truncate">
               {repo.owner && repo.repo_name
@@ -376,10 +378,12 @@ function RepositoryRow({
             </span>
           </div>
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 lg:justify-end">
+      <div className="flex flex-col gap-4 border-t border-border/80 bg-background/15 px-5 py-3.5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="shrink-0">
           {repo.assigned_login ? (
-            <div className="text-left lg:text-right">
+            <div className="text-left">
               <p className="data-label">
                 {repo.routing_configured ? "ROUTE ACTIVE" : "IDENTITY ONLY"}
               </p>
@@ -393,57 +397,82 @@ function RepositoryRow({
               </p>
             </div>
           ) : (
-            <div className="text-left lg:text-right">
+            <div className="text-left">
               <p className="data-label">ROUTING STATE</p>
               <p className="mt-1 text-sm font-semibold text-warning">Unassigned</p>
             </div>
           )}
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={onOpen} disabled={pending}>
-              Open workspace <ArrowRight aria-hidden />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-11 sm:min-h-9"
+            onClick={onOpen}
+            disabled={pending}
+          >
+            Open workspace <ArrowRight aria-hidden />
+          </Button>
+          {repo.assigned_login && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-11 sm:min-h-9"
+              onClick={onActions}
+              disabled={pending}
+            >
+              <FileDiff aria-hidden /> Changes
             </Button>
-            {repo.assigned_login && (
-              <Button size="sm" variant="outline" onClick={onActions} disabled={pending}>
-                <FileDiff aria-hidden /> Changes
+          )}
+          {repo.assigned_login &&
+            repo.remote_protocol === "https" &&
+            (!repo.routing_configured ? (
+              <Button size="sm" className="min-h-11 sm:min-h-9" onClick={onLink} disabled={pending}>
+                {pending ? (
+                  <Loader2 className="animate-spin" aria-hidden />
+                ) : (
+                  <PlugZap aria-hidden />
+                )}
+                Enable route
               </Button>
-            )}
-            {repo.assigned_login &&
-              repo.remote_protocol === "https" &&
-              (!repo.routing_configured ? (
-                <Button size="sm" onClick={onLink} disabled={pending}>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-h-11 sm:min-h-9"
+                  onClick={onTest}
+                  disabled={pending}
+                >
                   {pending ? (
                     <Loader2 className="animate-spin" aria-hidden />
                   ) : (
-                    <PlugZap aria-hidden />
+                    <ShieldCheck aria-hidden />
                   )}
-                  Enable route
+                  Verify
                 </Button>
-              ) : (
-                <>
-                  <Button size="sm" variant="outline" onClick={onTest} disabled={pending}>
-                    {pending ? (
-                      <Loader2 className="animate-spin" aria-hidden />
-                    ) : (
-                      <ShieldCheck aria-hidden />
-                    )}
-                    Verify
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={onUnlink} disabled={pending}>
-                    <Unplug aria-hidden /> Unlink
-                  </Button>
-                </>
-              ))}
-            <Button
-              size="sm"
-              variant={repo.assigned_login ? "outline" : "default"}
-              onClick={onAssign}
-              disabled={pending}
-            >
-              <KeyRound aria-hidden />
-              {repo.assigned_login ? "Edit" : "Assign identity"}
-              {!repo.assigned_login && <ArrowRight aria-hidden />}
-            </Button>
-          </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="min-h-11 sm:min-h-9"
+                  onClick={onUnlink}
+                  disabled={pending}
+                >
+                  <Unplug aria-hidden /> Unlink
+                </Button>
+              </>
+            ))}
+          <Button
+            size="sm"
+            variant={repo.assigned_login ? "outline" : "default"}
+            className="min-h-11 sm:min-h-9"
+            onClick={onAssign}
+            disabled={pending}
+          >
+            <KeyRound aria-hidden />
+            {repo.assigned_login ? "Edit" : "Assign identity"}
+            {!repo.assigned_login && <ArrowRight aria-hidden />}
+          </Button>
         </div>
       </div>
     </article>

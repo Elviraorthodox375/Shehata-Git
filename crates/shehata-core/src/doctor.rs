@@ -240,33 +240,26 @@ impl Doctor {
     }
 
     fn check_path(&self) -> SystemCheck {
-        let Ok(exe) = std::env::current_exe() else {
-            return SystemCheck::attention(
-                "path",
-                "User PATH",
-                "Could not determine where this app is running from.",
-                "Reinstall Shehata Git.",
-                None,
-            );
-        };
-        let dir = exe.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-        let on_path = directory_is_on_path(&dir);
-        if on_path {
+        if let Some(helper) = locate_binary_on_user_path("git-credential-shehata") {
             SystemCheck::ready(
                 "path",
                 "User PATH",
-                "The app directory is on your user PATH, so git can find the credential helper.",
-                None,
+                "Git and AI tools can find the credential helper from your user PATH.",
+                Some(helper.display().to_string()),
             )
         } else {
+            let location = std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(std::path::Path::to_path_buf))
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "the current app directory".to_string());
             SystemCheck::attention(
                 "path",
                 "User PATH",
                 format!(
-                    "{} is not on your user PATH. Terminal and AI-tool pushes need it to find the credential helper.",
-                    dir.display()
+                    "git-credential-shehata is available beside the app at {location}, but terminal and AI-tool pushes cannot find it from your user PATH."
                 ),
-                "The Windows installer will add the installed app directory to your user PATH. In development, use the binaries in target\\debug directly.",
+                "Reinstall Shehata Git to add its installed directory to your user PATH, then reopen terminals and AI tools.",
                 None,
             )
         }
@@ -291,13 +284,9 @@ impl Doctor {
     }
 }
 
-fn directory_is_on_path(directory: &std::path::Path) -> bool {
-    let expected = normalized_path(directory);
-    let process_has_path = std::env::var_os("PATH")
-        .map(|paths| std::env::split_paths(&paths).any(|path| normalized_path(&path) == expected))
-        .unwrap_or(false);
-    if process_has_path {
-        return true;
+fn locate_binary_on_user_path(name: &str) -> Option<PathBuf> {
+    if let Ok(path) = which::which(name) {
+        return Some(path);
     }
 
     #[cfg(target_os = "windows")]
@@ -308,15 +297,20 @@ fn directory_is_on_path(directory: &std::path::Path) -> bool {
         let user = RegKey::predef(HKEY_CURRENT_USER);
         if let Ok(environment) = user.open_subkey("Environment") {
             if let Ok(path) = environment.get_value::<String, _>("Path") {
-                return std::env::split_paths(&path)
-                    .any(|entry| normalized_path(&entry) == expected);
+                for directory in std::env::split_paths(&path) {
+                    let executable = directory.join(format!("{name}.exe"));
+                    if executable.is_file() {
+                        return Some(executable);
+                    }
+                }
             }
         }
     }
 
-    false
+    None
 }
 
+#[cfg(test)]
 fn normalized_path(path: &std::path::Path) -> String {
     path.to_string_lossy()
         .trim()
@@ -345,15 +339,18 @@ fn locate_binary(name: &str) -> Option<PathBuf> {
 #[cfg(target_os = "windows")]
 fn webview2_version() -> Option<String> {
     // Registry check without extra crates: `reg query` with argument arrays.
-    let output = std::process::Command::new("reg")
+    use std::os::windows::process::CommandExt;
+
+    let mut command = std::process::Command::new("reg");
+    command
         .args([
             "query",
             r"HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
             "/v",
             "pv",
         ])
-        .output()
-        .ok()?;
+        .creation_flags(0x0800_0000);
+    let output = command.output().ok()?;
     if !output.status.success() {
         return None;
     }
