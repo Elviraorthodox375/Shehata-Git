@@ -5,6 +5,21 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 8 native CLI commands
+
+- Replaced CLI milestone placeholders with commands that call the same shared Rust core as the desktop.
+- Implemented accounts list/refresh; repositories list/add/show/assign-and-route/unlink-and-restore; status; non-mutating connection test; normal push with preflight; and fixed native MCP launcher.
+- Repository references accept a stable UUID, repository root, any nested path inside a registered worktree, or the current directory where documented.
+- Added human-readable output and global `--json` output with stable error codes. Human output escapes terminal control characters; neither mode outputs tokens.
+- Added `push --yes` for explicit approval-policy acknowledgement. No force, force-with-lease, arbitrary command, amend, rebase, destructive reset, or remote-deletion option exists.
+- The CLI locates `shehata-mcp` only beside itself or on PATH and launches that fixed executable with inherited stdio.
+- Added CLI schema and process-level contract tests covering command shape, absence of force options, structured JSON errors, and credential-output guards.
+- Built and manually verified `shehata --help`, `shehata repos --help`, and `shehata --json repos list`.
+- Installer/PATH delivery remains in Phase 10.
+- Final repository gate passed: workspace formatting, clippy with warnings denied, all 64 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+
+---
+
 ## 2026-08-01 — Phase 7 safe local Git actions foundation
 
 - Added shared status, selected-path stage/unstage, and normal commit services in Rust core.

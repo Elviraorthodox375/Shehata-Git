@@ -62,9 +62,12 @@
 - ✅ Real local-remote pull/push regression test.
 - Real GitHub acceptance remains pending authenticated owner repositories.
 
-## Phase 8 — CLI ⬜
+## Phase 8 — CLI 🚧
 
-- All commands implemented, `--json`, installer/PATH integration.
+- ✅ All documented initial commands call shared core logic.
+- ✅ Human output, structured `--json`, useful exit codes, and safe error output.
+- ✅ CLI contract tests and fixed MCP launcher.
+- Installer/PATH integration remains for Phase 10.
 
 ## Phase 9 — MCP ⬜
 

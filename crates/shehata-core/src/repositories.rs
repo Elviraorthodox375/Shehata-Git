@@ -12,6 +12,7 @@ use shehata_storage::{queries, Database, RepositoryRecord};
 use uuid::Uuid;
 
 use crate::Result;
+use crate::ShehataError;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RepositorySummary {
@@ -35,6 +36,31 @@ pub struct RepositorySummary {
 pub async fn discover_selected_repository(path: &str) -> Result<DiscoveredRepository> {
     let git = GitRunner::locate()?;
     Ok(shehata_git::discover_repository(&git, std::path::Path::new(path)).await?)
+}
+
+/// Resolve a CLI/MCP repository reference by stable UUID or by any path inside
+/// a registered worktree. No database connection is held across Git awaits.
+pub async fn resolve_repository_reference(reference: Option<&str>) -> Result<RepositoryRecord> {
+    if let Some(value) = reference.map(str::trim).filter(|value| !value.is_empty()) {
+        if uuid::Uuid::parse_str(value).is_ok() {
+            let db = Database::open_default()?;
+            return queries::find_repository_by_id(&db, value)?
+                .ok_or_else(|| ShehataError::RepositoryNotFound(value.to_string()));
+        }
+    }
+
+    let selected = match reference.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) => std::path::PathBuf::from(value),
+        None => {
+            std::env::current_dir().map_err(|error| ShehataError::Internal(error.to_string()))?
+        }
+    };
+    let git = GitRunner::locate()?;
+    let discovered = shehata_git::discover_repository(&git, &selected).await?;
+    let canonical_path = discovered.canonical_path.to_string_lossy().into_owned();
+    let db = Database::open_default()?;
+    queries::find_repository_by_path(&db, &canonical_path)?
+        .ok_or_else(|| ShehataError::RepositoryNotLinked(canonical_path))
 }
 
 pub fn save_discovered_repository(
