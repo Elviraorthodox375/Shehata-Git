@@ -18,6 +18,7 @@ struct McpInfo {
     executable_path: Option<String>,
     available: bool,
     config_snippet: String,
+    detected_clients: Vec<shehata_core::integrations::AiClientInfo>,
 }
 
 fn open_db() -> Result<Database, String> {
@@ -131,6 +132,24 @@ async fn repositories_status(
 }
 
 #[tauri::command]
+async fn repositories_file_diff(
+    request: core_actions::FileDiffRequest,
+) -> Result<core_actions::FileDiff, String> {
+    core_actions::file_diff(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_sync_preview(
+    repository_id: String,
+) -> Result<core_actions::SyncPreview, String> {
+    core_actions::sync_preview(&repository_id)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
 async fn repositories_stage(
     request: core_actions::PathsRequest,
 ) -> Result<core_actions::GitActionResult, String> {
@@ -206,7 +225,15 @@ fn mcp_info() -> McpInfo {
         available: exe.is_some(),
         executable_path: exe.map(|p| p.display().to_string()),
         config_snippet,
+        detected_clients: shehata_core::integrations::detect_ai_clients(),
     }
+}
+
+#[tauri::command]
+async fn diagnostics_report() -> Result<shehata_core::diagnostics::SafeDiagnosticReport, String> {
+    shehata_core::diagnostics::safe_diagnostic_report()
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
 }
 
 #[tauri::command]
@@ -246,6 +273,8 @@ pub fn run() {
             repositories_test,
             repositories_unlink,
             repositories_status,
+            repositories_file_diff,
+            repositories_sync_preview,
             repositories_stage,
             repositories_unstage,
             repositories_commit,
@@ -254,6 +283,7 @@ pub fn run() {
             repositories_set_push_policy,
             audit_list,
             mcp_info,
+            diagnostics_report,
             repositories_generate_agents,
         ])
         .run(tauri::generate_context!())

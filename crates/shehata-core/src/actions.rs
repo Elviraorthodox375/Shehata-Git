@@ -17,6 +17,8 @@ use shehata_storage::{queries, AccountRecord, Database, NewAuditEvent, Repositor
 use crate::error::{Result, ShehataError};
 use crate::models::PushPolicy;
 
+const MAX_DIFF_BYTES: usize = 256 * 1024;
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ChangeEntry {
     pub path: String,
@@ -40,6 +42,25 @@ pub struct DiffSummary {
     pub unstaged_paths: usize,
     pub untracked_paths: usize,
     pub conflict_paths: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FileDiffRequest {
+    pub repository_id: String,
+    pub path: String,
+    #[serde(default)]
+    pub staged: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct FileDiff {
+    pub repository_id: String,
+    pub path: String,
+    pub staged: bool,
+    pub content: String,
+    pub truncated: bool,
+    pub sensitive: bool,
+    pub blocked_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -107,6 +128,16 @@ pub struct NetworkActionResult {
     pub behind_before: usize,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SyncPreview {
+    pub repository_id: String,
+    pub remote_name: String,
+    pub branch: String,
+    pub account_login: String,
+    pub ahead: usize,
+    pub behind: usize,
+}
+
 #[derive(Debug)]
 struct NetworkPlan {
     repository: RepositoryRecord,
@@ -126,6 +157,126 @@ pub async fn status(repository_id: &str) -> Result<RepositoryActionStatus> {
 pub async fn diff_summary(repository_id: &str) -> Result<DiffSummary> {
     let status = status(repository_id).await?;
     Ok(summarize_status(status))
+}
+
+pub async fn file_diff(request: FileDiffRequest) -> Result<FileDiff> {
+    let db_path = Database::default_path()?;
+    file_diff_at(&db_path, request).await
+}
+
+async fn file_diff_at(db_path: &Path, request: FileDiffRequest) -> Result<FileDiff> {
+    let repository = load_repository(db_path, &request.repository_id)?;
+    let path = validate_paths(vec![request.path])?
+        .into_iter()
+        .next()
+        .expect("one validated path");
+    if is_sensitive_diff_path(&path) {
+        return Ok(FileDiff {
+            repository_id: repository.id,
+            path,
+            staged: request.staged,
+            content: String::new(),
+            truncated: false,
+            sensitive: true,
+            blocked_reason: Some(
+                "Preview hidden because this filename may contain credentials or secrets."
+                    .to_string(),
+            ),
+        });
+    }
+
+    let repo_path = Path::new(&repository.canonical_path);
+    let git = GitRunner::locate()?;
+    let output = if request.staged {
+        git.run_in(
+            Some(repo_path),
+            &[
+                "diff",
+                "--cached",
+                "--no-ext-diff",
+                "--no-color",
+                "--unified=3",
+                "--",
+                &path,
+            ],
+        )
+        .await?
+    } else {
+        let tracked = git
+            .run_in(
+                Some(repo_path),
+                &["ls-files", "--error-unmatch", "--", &path],
+            )
+            .await?
+            .success();
+        if tracked {
+            git.run_in(
+                Some(repo_path),
+                &[
+                    "diff",
+                    "--no-ext-diff",
+                    "--no-color",
+                    "--unified=3",
+                    "--",
+                    &path,
+                ],
+            )
+            .await?
+        } else {
+            git.run_in(
+                Some(repo_path),
+                &[
+                    "diff",
+                    "--no-index",
+                    "--no-ext-diff",
+                    "--no-color",
+                    "--unified=3",
+                    "--",
+                    "/dev/null",
+                    &path,
+                ],
+            )
+            .await?
+        }
+    };
+    if !matches!(output.code, 0 | 1) {
+        return Err(GitError::Exit {
+            code: output.code,
+            message: output.stderr.trim().to_string(),
+        }
+        .into());
+    }
+    let (content, truncated) = truncate_utf8(output.stdout, MAX_DIFF_BYTES);
+    Ok(FileDiff {
+        repository_id: repository.id,
+        path,
+        staged: request.staged,
+        content,
+        truncated,
+        sensitive: false,
+        blocked_reason: None,
+    })
+}
+
+pub async fn sync_preview(repository_id: &str) -> Result<SyncPreview> {
+    let db_path = Database::default_path()?;
+    sync_preview_at(&db_path, repository_id, true).await
+}
+
+async fn sync_preview_at(
+    db_path: &Path,
+    repository_id: &str,
+    check_token: bool,
+) -> Result<SyncPreview> {
+    let plan = prepare_network_plan(db_path, repository_id, None, false, check_token).await?;
+    Ok(SyncPreview {
+        repository_id: plan.repository.id,
+        remote_name: plan.remote_name,
+        branch: plan.branch,
+        account_login: plan.account.login,
+        ahead: plan.ahead,
+        behind: plan.behind,
+    })
 }
 
 fn summarize_status(status: RepositoryActionStatus) -> DiffSummary {
@@ -857,6 +1008,33 @@ fn validate_paths(paths: Vec<String>) -> Result<Vec<String>> {
     Ok(clean)
 }
 
+fn is_sensitive_diff_path(path: &str) -> bool {
+    let normalized = path.replace('\\', "/").to_ascii_lowercase();
+    let name = normalized.rsplit('/').next().unwrap_or(&normalized);
+    name == ".env"
+        || name.starts_with(".env.")
+        || name.ends_with(".pem")
+        || name.ends_with(".key")
+        || name == "credentials"
+        || name == "credentials.json"
+        || name == "service-account.json"
+        || name == "id_rsa"
+        || name == "id_ed25519"
+}
+
+fn truncate_utf8(value: String, max_bytes: usize) -> (String, bool) {
+    if value.len() <= max_bytes {
+        return (value, false);
+    }
+    let boundary = value
+        .char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= max_bytes)
+        .last()
+        .unwrap_or(0);
+    (value[..boundary].to_string(), true)
+}
+
 fn validate_commit_message(message: &str) -> Result<String> {
     let message = message.trim();
     if message.is_empty()
@@ -1091,6 +1269,65 @@ mod tests {
         assert!(validate_paths(vec!["../secret".into()]).is_err());
         assert!(validate_paths(vec![".git/config".into()]).is_err());
         assert!(validate_paths(vec!["-danger".into()]).is_ok());
+    }
+
+    #[test]
+    fn blocks_sensitive_diff_filenames_and_truncates_on_utf8_boundaries() {
+        assert!(is_sensitive_diff_path(".env"));
+        assert!(is_sensitive_diff_path("config/production.pem"));
+        assert!(!is_sensitive_diff_path("src/environment.ts"));
+        let (value, truncated) = truncate_utf8("aéz".to_string(), 2);
+        assert_eq!(value, "a");
+        assert!(truncated);
+    }
+
+    #[tokio::test]
+    async fn returns_tracked_untracked_and_sensitive_file_diffs() {
+        let (_temp, repo, db_path, id) = fixture();
+        fs::write(repo.join("tracked.txt"), "before\n").unwrap();
+        git(&repo, &["add", "--", "tracked.txt"]);
+        git(&repo, &["commit", "-m", "feat: baseline"]);
+        fs::write(repo.join("tracked.txt"), "after\n").unwrap();
+        fs::write(repo.join("new.txt"), "new line\n").unwrap();
+        fs::write(repo.join(".env"), "TOKEN=secret\n").unwrap();
+
+        let tracked = file_diff_at(
+            &db_path,
+            FileDiffRequest {
+                repository_id: id.clone(),
+                path: "tracked.txt".into(),
+                staged: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(tracked.content.contains("-before"));
+        assert!(tracked.content.contains("+after"));
+
+        let untracked = file_diff_at(
+            &db_path,
+            FileDiffRequest {
+                repository_id: id.clone(),
+                path: "new.txt".into(),
+                staged: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(untracked.content.contains("+new line"));
+
+        let sensitive = file_diff_at(
+            &db_path,
+            FileDiffRequest {
+                repository_id: id,
+                path: ".env".into(),
+                staged: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(sensitive.sensitive);
+        assert!(!sensitive.content.contains("secret"));
     }
 
     #[test]

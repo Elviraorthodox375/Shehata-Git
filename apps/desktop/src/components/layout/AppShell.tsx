@@ -23,7 +23,7 @@ export function AppShell({
     <div className="app-canvas flex h-full overflow-hidden">
       <Sidebar currentPage={currentPage} onNavigate={onNavigate} />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-[5.4rem] items-center justify-between gap-5 border-b border-border/80 bg-background/75 px-5 backdrop-blur-md lg:px-8">
+        <header className="flex min-h-[5.4rem] items-center justify-between gap-5 border-b border-white/10 bg-background/45 px-4 backdrop-blur-2xl sm:px-5 lg:px-8">
           <div className="min-w-0">
             <p className="eyebrow mb-1">Shehata / Local identity control</p>
             <div className="flex min-w-0 items-baseline gap-3">
@@ -51,7 +51,7 @@ export function AppShell({
             </div>
           </div>
         </header>
-        <div className="scrollbar-thin flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
+        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5 lg:px-8 lg:py-7">
           <div className="animate-fade-in">{children}</div>
         </div>
       </main>

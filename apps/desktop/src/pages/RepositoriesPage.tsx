@@ -43,27 +43,51 @@ import {
 import type { GhAccount, RepositorySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function RepositoriesPage() {
+export function RepositoriesPage({
+  onOpenRepository,
+}: {
+  onOpenRepository?: (repositoryId: string) => void;
+}) {
   const queryClient = useQueryClient();
   const [selectedRepo, setSelectedRepo] = useState<RepositorySummary | null>(null);
+  const [guidedRepositoryId, setGuidedRepositoryId] = useState<string | null>(null);
   const [changesRepo, setChangesRepo] = useState<RepositorySummary | null>(null);
   const [assignmentNotice, setAssignmentNotice] = useState<string | null>(null);
   const repos = useQuery({ queryKey: ["repositories"], queryFn: listRepositories });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
   const addRepo = useMutation({
     mutationFn: addRepository,
-    onSuccess: async () => {
+    onSuccess: async (repository) => {
       await queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      setGuidedRepositoryId(repository.id);
+      setSelectedRepo(repository);
     },
   });
   const assign = useMutation({
-    mutationFn: assignRepository,
+    mutationFn: async (request: Parameters<typeof assignRepository>[0]) => {
+      const assignment = await assignRepository(request);
+      if (
+        guidedRepositoryId === request.repository_id &&
+        assignment.repository.remote_protocol === "https"
+      ) {
+        await linkRepository(request.repository_id);
+        const connection = await testRepositoryConnection(request.repository_id);
+        return { assignment, connection };
+      }
+      return { assignment, connection: null };
+    },
     onSuccess: async (result) => {
       await queryClient.invalidateQueries({ queryKey: ["repositories"] });
       setAssignmentNotice(
-        `${result.repository.display_name} is now locked to @${result.repository.assigned_login}.`,
+        result.connection
+          ? `${result.assignment.repository.display_name} is connected, routed, and verified through @${result.connection.account_login}.`
+          : `${result.assignment.repository.display_name} is now locked to @${result.assignment.repository.assigned_login}.`,
       );
+      setGuidedRepositoryId(null);
       setSelectedRepo(null);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["repositories"] });
     },
   });
   const link = useMutation({
@@ -135,7 +159,7 @@ export function RepositoriesPage() {
               ) : (
                 <FolderOpen aria-hidden />
               )}
-              {addRepo.isPending ? "Inspecting…" : "Add repository"}
+              {addRepo.isPending ? "Inspecting…" : "Connect repository"}
             </Button>
           </div>
         </div>
@@ -201,12 +225,12 @@ export function RepositoriesPage() {
             <FolderGit2 className="h-6 w-6 text-primary" aria-hidden />
           </div>
           <p className="eyebrow mt-5">Registry empty</p>
-          <h3 className="mt-2 font-display text-xl font-semibold">Inspect your first repository</h3>
+          <h3 className="mt-2 font-display text-xl font-semibold">Connect your first repository</h3>
           <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
             Select a project folder. Shehata Git reads its Git metadata and stores no source files.
           </p>
           <Button className="mt-6" onClick={chooseRepository} disabled={addRepo.isPending}>
-            <FolderOpen aria-hidden /> Choose repository folder
+            <FolderOpen aria-hidden /> Connect repository
           </Button>
         </section>
       )}
@@ -219,12 +243,14 @@ export function RepositoriesPage() {
             index={index}
             onAssign={() => {
               assign.reset();
+              setGuidedRepositoryId(null);
               setSelectedRepo(repo);
             }}
             onLink={() => link.mutate(repo.id)}
             onTest={() => connectionTest.mutate(repo.id)}
             onUnlink={() => confirmUnlink(repo)}
             onActions={() => setChangesRepo(repo)}
+            onOpen={() => onOpenRepository?.(repo.id)}
             pending={
               (link.isPending && link.variables === repo.id) ||
               (connectionTest.isPending && connectionTest.variables === repo.id) ||
@@ -238,6 +264,7 @@ export function RepositoriesPage() {
         <AssignmentDialog
           repo={selectedRepo}
           accounts={accounts.data ?? []}
+          guided={guidedRepositoryId === selectedRepo.id}
           pending={assign.isPending}
           error={assign.isError ? errorMessage(assign.error) : null}
           onClose={() => setSelectedRepo(null)}
@@ -291,6 +318,7 @@ function RepositoryRow({
   onTest,
   onUnlink,
   onActions,
+  onOpen,
   pending,
 }: {
   repo: RepositorySummary;
@@ -300,6 +328,7 @@ function RepositoryRow({
   onTest: () => void;
   onUnlink: () => void;
   onActions: () => void;
+  onOpen: () => void;
   pending: boolean;
 }) {
   return (
@@ -370,6 +399,9 @@ function RepositoryRow({
             </div>
           )}
           <div className="flex flex-wrap justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={onOpen} disabled={pending}>
+              Open workspace <ArrowRight aria-hidden />
+            </Button>
             {repo.assigned_login && (
               <Button size="sm" variant="outline" onClick={onActions} disabled={pending}>
                 <FileDiff aria-hidden /> Changes
@@ -731,6 +763,7 @@ function normalizePushPolicy(value: string): PushPolicy {
 function AssignmentDialog({
   repo,
   accounts,
+  guided,
   pending,
   error,
   onClose,
@@ -738,6 +771,7 @@ function AssignmentDialog({
 }: {
   repo: RepositorySummary;
   accounts: GhAccount[];
+  guided: boolean;
   pending: boolean;
   error: string | null;
   onClose: () => void;
@@ -746,8 +780,13 @@ function AssignmentDialog({
   const available = accounts.filter(
     (account) => account.token_available && (!repo.host || account.host === repo.host),
   );
+  const recommended = available.find(
+    (account) => account.login.toLowerCase() === repo.owner?.toLowerCase(),
+  );
   const initial =
-    available.find((account) => account.login === repo.assigned_login) ?? available[0];
+    available.find((account) => account.login === repo.assigned_login) ??
+    recommended ??
+    available[0];
   const [selectedKey, setSelectedKey] = useState(initial ? `${initial.host}:${initial.login}` : "");
   const [commitName, setCommitName] = useState(repo.commit_name ?? "");
   const [commitEmail, setCommitEmail] = useState(repo.commit_email ?? "");
@@ -767,9 +806,9 @@ function AssignmentDialog({
               <ShieldCheck className="h-5 w-5 text-primary" aria-hidden />
             </div>
             <div>
-              <p className="eyebrow">Phase 5 / repository assignment</p>
+              <p className="eyebrow">{guided ? "Guided connection" : "Repository assignment"}</p>
               <h2 id="assignment-title" className="mt-1 font-display text-xl font-semibold">
-                Lock identity for {repo.display_name}
+                {guided ? "Connect" : "Lock identity for"} {repo.display_name}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Remote: {repo.host ?? "unknown"}/{repo.owner ?? "—"}/{repo.repo_name ?? "—"}
@@ -813,6 +852,7 @@ function AssignmentDialog({
                   {available.map((account) => {
                     const key = `${account.host}:${account.login}`;
                     const active = key === selectedKey;
+                    const isRecommended = recommended?.login === account.login;
                     return (
                       <label
                         key={key}
@@ -840,6 +880,7 @@ function AssignmentDialog({
                           </span>
                           <span className="block font-mono text-[0.65rem] text-muted-foreground">
                             {account.host}
+                            {isRecommended ? " · recommended" : ""}
                           </span>
                         </span>
                         <span
@@ -894,6 +935,14 @@ function AssignmentDialog({
               </div>
             )}
 
+            {guided && repo.remote_protocol === "https" && (
+              <div className="flex gap-3 border border-primary/25 bg-primary/[0.06] p-3 text-xs leading-5 text-muted-foreground">
+                <PlugZap className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+                One confirmation assigns the identity, enables credential routing, and verifies the
+                remote connection. Your token never enters the app.
+              </div>
+            )}
+
             {error && (
               <div className="flex gap-3 border border-destructive/30 bg-destructive/[0.06] p-3">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
@@ -917,7 +966,7 @@ function AssignmentDialog({
                 ) : (
                   <ShieldCheck aria-hidden />
                 )}
-                {pending ? "Applying…" : "Confirm assignment"}
+                {pending ? "Connecting…" : guided ? "Connect and verify" : "Confirm assignment"}
               </Button>
             </div>
           </footer>

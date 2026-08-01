@@ -55,6 +55,20 @@ export function getRepositoryStatus(repositoryId: string): Promise<RepositoryAct
   return invoke<RepositoryActionStatus>("repositories_status", { repositoryId });
 }
 
+export function getRepositoryFileDiff(
+  repositoryId: string,
+  path: string,
+  staged: boolean,
+): Promise<FileDiff> {
+  return invoke<FileDiff>("repositories_file_diff", {
+    request: { repository_id: repositoryId, path, staged },
+  });
+}
+
+export function previewRepositorySync(repositoryId: string): Promise<SyncPreview> {
+  return invoke<SyncPreview>("repositories_sync_preview", { repositoryId });
+}
+
 export function stageRepositoryPaths(
   repositoryId: string,
   paths: string[],
@@ -110,6 +124,10 @@ export function getMcpInfo(): Promise<McpInfo> {
   return invoke<McpInfo>("mcp_info");
 }
 
+export function getDiagnosticReport(): Promise<SafeDiagnosticReport> {
+  return invoke<SafeDiagnosticReport>("diagnostics_report");
+}
+
 export function generateRepositoryAgents(repositoryId: string): Promise<GenerateAgentsResult> {
   return invoke<GenerateAgentsResult>("repositories_generate_agents", {
     request: { repository_id: repositoryId },
@@ -120,6 +138,32 @@ export interface McpInfo {
   executable_path: string | null;
   available: boolean;
   config_snippet: string;
+  detected_clients: AiClientInfo[];
+}
+
+export interface AiClientInfo {
+  id: string;
+  name: string;
+  available: boolean;
+  executable_path: string | null;
+}
+
+export interface DiagnosticCheck {
+  id: string;
+  status: string;
+  version: string | null;
+}
+
+export interface SafeDiagnosticReport {
+  generated_at: string;
+  app_version: string;
+  os: string;
+  healthy: boolean;
+  checks: DiagnosticCheck[];
+  repository_count: number;
+  assigned_repository_count: number;
+  routed_repository_count: number;
+  ai_clients: AiClientInfo[];
 }
 
 export interface GenerateAgentsResult {
@@ -172,6 +216,25 @@ export interface RepositoryActionStatus {
   branch: string | null;
   detached_head: boolean;
   changes: ChangeEntry[];
+}
+
+export interface FileDiff {
+  repository_id: string;
+  path: string;
+  staged: boolean;
+  content: string;
+  truncated: boolean;
+  sensitive: boolean;
+  blocked_reason: string | null;
+}
+
+export interface SyncPreview {
+  repository_id: string;
+  remote_name: string;
+  branch: string;
+  account_login: string;
+  ahead: number;
+  behind: number;
 }
 
 export interface GitActionResult {

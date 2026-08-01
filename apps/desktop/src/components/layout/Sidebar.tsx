@@ -1,11 +1,12 @@
 import { Activity, Bot, FolderGit2, Home, Settings, Stethoscope, Users } from "lucide-react";
-import { LogoLockup } from "@/components/Logo";
+import { LogoLockup, LogoMark } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 
 export type PageId =
   | "home"
   | "accounts"
   | "repositories"
+  | "repository-detail"
   | "ai-integration"
   | "activity"
   | "settings"
@@ -34,10 +35,15 @@ interface SidebarProps {
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   return (
-    <aside className="relative flex h-full w-[15rem] shrink-0 flex-col border-r border-border/80 bg-surface/95">
-      <div className="border-b border-border/70 px-5 py-5">
-        <LogoLockup />
-        <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
+    <aside className="liquid-sidebar relative flex h-full w-[4.75rem] shrink-0 flex-col border-r border-white/10 lg:w-[15rem]">
+      <div className="border-b border-white/10 px-3 py-5 lg:px-5">
+        <div className="hidden lg:block">
+          <LogoLockup />
+        </div>
+        <div className="flex justify-center lg:hidden">
+          <LogoMark size={30} />
+        </div>
+        <div className="mt-4 hidden items-center justify-between border-t border-white/10 pt-3 lg:flex">
           <span className="eyebrow">Local engine</span>
           <span className="flex items-center gap-1.5 font-mono text-[0.65rem] uppercase tracking-wider text-success">
             <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_10px_hsl(var(--success)/0.7)]" />
@@ -50,7 +56,9 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         <p className="eyebrow px-3 pb-2">Workspace</p>
         <div className="space-y-1">
           {NAV_ITEMS.map((item) => {
-            const isActive = currentPage === item.id;
+            const isActive =
+              currentPage === item.id ||
+              (item.id === "repositories" && currentPage === "repository-detail");
             return (
               <button
                 type="button"
@@ -77,8 +85,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                   )}
                   aria-hidden
                 />
-                <span className="flex-1 font-medium">{item.label}</span>
-                <span className="font-mono text-[0.625rem] text-muted-foreground/55">
+                <span className="hidden flex-1 font-medium lg:block">{item.label}</span>
+                <span className="hidden font-mono text-[0.625rem] text-muted-foreground/55 lg:block">
                   {item.shortcut}
                 </span>
               </button>
@@ -100,10 +108,10 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           )}
         >
           <Stethoscope className="h-4 w-4" aria-hidden />
-          <span className="flex-1 text-left font-medium">System check</span>
-          <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden />
+          <span className="hidden flex-1 text-left font-medium lg:block">System check</span>
+          <span className="hidden h-1.5 w-1.5 rounded-full bg-warning lg:block" aria-hidden />
         </button>
-        <div className="flex items-center justify-between px-3 pb-1 pt-3 font-mono text-[0.625rem] uppercase tracking-wider text-muted-foreground/55">
+        <div className="hidden items-center justify-between px-3 pb-1 pt-3 font-mono text-[0.625rem] uppercase tracking-wider text-muted-foreground/55 lg:flex">
           <span>v0.1.0</span>
           <span>Local first</span>
         </div>

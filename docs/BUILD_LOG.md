@@ -5,6 +5,45 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 10 product experience and safe repository workspace
+
+- Reworked the desktop visual system into a restrained Liquid Glass workspace
+  with translucent depth, precise highlights, a responsive icon rail, reduced
+  transparency, comfortable/compact density, and dark/light themes.
+- Added a guided Connect repository flow that discovers a worktree, recommends
+  an exact owner-matching account when available, assigns local identity,
+  enables the HTTPS credential route, and verifies it after one confirmation.
+- Added a full repository workspace with changed-file selection, stage/unstage,
+  normal commits, identity and policy context, recent audit events, and a
+  bounded read-only diff viewer.
+- Diff requests are implemented in shared Rust core, accept only validated
+  repository-relative paths, pass paths after Git's option terminator, hide
+  common credential/secret filenames, and truncate previews at 256 KB.
+- Added Smart Sync preview in shared core. It verifies the assigned route,
+  fetches safely, reports exact ahead/behind state, fast-forwards only when
+  behind, confirms normal pushes when ahead, and blocks automatic diverged
+  histories instead of merging or rebasing them.
+- Added fixed-catalog local detection for Codex, Claude Code, Cursor, and VS
+  Code; redesigned Agent Bridge around detected clients and its guarded
+  permission envelope.
+- Rebuilt Activity as a searchable result-filtered audit timeline and added a
+  safe diagnostic JSON report containing versions/readiness/counts only—never
+  logins, repository paths, remotes, tokens, or source contents.
+- Added Rust coverage for safe diff behavior, UTF-8 truncation, credential-name
+  blocking, and the reviewed AI-client catalog.
+- Built and visually inspected the native Windows app across Overview,
+  Repositories, Agent Bridge, Preferences, and Audit Log. No login, repository
+  mutation, or external Git operation was performed during visual QA.
+- Final repository gate passed: workspace formatting, Clippy with warnings
+  denied, all 72 Rust tests, strict TypeScript, 3 frontend tests, and Biome
+  lint.
+- Rebuilt the unsigned Windows x64 NSIS installer at
+  `target/release/bundle/nsis/Shehata Git_0.1.0_x64-setup.exe` (5,169,392
+  bytes; SHA-256
+  `61D6D01FDA60280F0D02DA7695A927BA783606850D96BED353E0E38B942FBAAB`).
+
+---
+
 ## 2026-08-01 — Phase 10 Windows installer vertical slice
 
 - Added a reproducible sidecar preparation step that release-builds the CLI,

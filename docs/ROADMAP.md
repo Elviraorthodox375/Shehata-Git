@@ -83,6 +83,9 @@
 - ✅ NSIS installer bundles the desktop app and all three command-line binaries.
 - ✅ Current-user PATH integration is added on install and removed on uninstall.
 - ✅ Real silent install/run/uninstall smoke test passed on Windows x64.
+- ✅ Guided repository connection, safe diff workspace, and Smart Sync preview.
+- ✅ Liquid Glass appearance, density/transparency controls, responsive navigation,
+  filtered audit timeline, AI-client detection, and safe diagnostic export.
 - Test matrix completion, accessibility pass, hosted CI/draft release, code signing,
   and two-account manual acceptance remain.
 
