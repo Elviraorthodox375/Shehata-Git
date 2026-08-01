@@ -4,6 +4,15 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.14 - 2026-08-02
+
+### Changed
+
+- Failed and blocked network actions now carry the same context as successful
+  ones — repository, branch, and remote — instead of one bare sentence. A
+  failure is when that context matters most.
+- The activity trail can be sorted newest or oldest first.
+
 ## 0.1.13 - 2026-08-02
 
 ### Changed

@@ -558,7 +558,7 @@ async fn push_at(
         Some(&plan.account.login),
         "push_preflight",
         "Push preflight passed",
-        None,
+        Some(format!("{} · {}", plan.repository.display_name, plan.branch).as_str()),
         "success",
         Some(0),
         started,
@@ -806,8 +806,21 @@ async fn finish_network_action(
                 &plan.repository.id,
                 Some(&plan.account.login),
                 action,
-                "Network Git action failed",
-                None,
+                &format!(
+                    "{} failed",
+                    if action == "push" {
+                        "Normal push"
+                    } else {
+                        "Fast-forward pull"
+                    }
+                ),
+                Some(
+                    format!(
+                        "{} · {} · {}",
+                        plan.repository.display_name, plan.branch, plan.remote_name
+                    )
+                    .as_str(),
+                ),
                 "failure",
                 git_error_code(&error),
                 started,

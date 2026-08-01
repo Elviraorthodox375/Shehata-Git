@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDownUp,
   CheckCircle2,
   Clock3,
   RefreshCw,
@@ -18,6 +19,7 @@ import { clearAuditEvents, deleteAuditEvent, listAuditEvents } from "@/lib/tauri
 import type { AuditEvent } from "@/lib/types";
 
 type ResultFilter = "all" | "success" | "failed";
+type SortOrder = "newest" | "oldest";
 
 export function ActivityPage() {
   const queryClient = useQueryClient();
@@ -34,6 +36,7 @@ export function ActivityPage() {
   });
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<ResultFilter>("all");
+  const [sort, setSort] = useState<SortOrder>("newest");
   const [deleteTarget, setDeleteTarget] = useState<AuditEvent | "all" | null>(null);
   const removeOne = useMutation({
     mutationFn: deleteAuditEvent,
@@ -53,7 +56,7 @@ export function ActivityPage() {
   });
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return (events.data ?? []).filter((event) => {
+    const rows = (events.data ?? []).filter((event) => {
       const matchesResult =
         result === "all" ||
         (result === "success" ? event.result === "success" : event.result !== "success");
@@ -65,7 +68,9 @@ export function ActivityPage() {
         event.account_login?.toLowerCase().includes(needle);
       return matchesResult && matchesSearch;
     });
-  }, [events.data, result, search]);
+    // The backend already returns newest first, so oldest is a plain reverse.
+    return sort === "newest" ? rows : [...rows].reverse();
+  }, [events.data, result, search, sort]);
   const successCount = events.data?.filter((event) => event.result === "success").length ?? 0;
   const failedCount = (events.data?.length ?? 0) - successCount;
 
@@ -116,6 +121,14 @@ export function ActivityPage() {
             </button>
           ))}
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setSort((value) => (value === "newest" ? "oldest" : "newest"))}
+          title={sort === "newest" ? "Showing newest first" : "Showing oldest first"}
+        >
+          <ArrowDownUp aria-hidden /> {sort === "newest" ? "Newest" : "Oldest"}
+        </Button>
         <Button
           variant="ghost"
           size="sm"
