@@ -7,8 +7,8 @@
 use serde::Serialize;
 use shehata_core::{
     accounts as core_accounts, actions as core_actions, agents as core_agents,
-    assignment as core_assignment, repositories as core_repositories, routing as core_routing,
-    Doctor,
+    assignment as core_assignment, prerequisites as core_prerequisites,
+    repositories as core_repositories, routing as core_routing, Doctor,
 };
 use shehata_github::{GhLoginEvent, GhRunner};
 use shehata_storage::{queries, Database};
@@ -28,6 +28,15 @@ fn open_db() -> Result<Database, String> {
 #[tauri::command]
 async fn doctor_run() -> Result<shehata_core::DoctorReport, String> {
     Ok(Doctor::new().run().await)
+}
+
+#[tauri::command]
+async fn prerequisites_install(
+    request: core_prerequisites::InstallPrerequisitesRequest,
+) -> Result<core_prerequisites::InstallPrerequisitesResult, String> {
+    core_prerequisites::install_prerequisites(request)
+        .await
+        .map_err(|error| shehata_core::redact::redact_github_tokens(&error.to_string()))
 }
 
 #[tauri::command]
@@ -264,6 +273,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             doctor_run,
+            prerequisites_install,
             accounts_list,
             accounts_add,
             repositories_list,

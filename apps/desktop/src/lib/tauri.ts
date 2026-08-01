@@ -11,6 +11,21 @@ export function runDoctor(): Promise<DoctorReport> {
   return invoke<DoctorReport>("doctor_run");
 }
 
+export type PrerequisiteId = "git" | "github_cli";
+
+export interface InstalledPrerequisite {
+  id: PrerequisiteId;
+  label: string;
+}
+
+export interface InstallPrerequisitesResult {
+  installed: InstalledPrerequisite[];
+}
+
+export function installPrerequisites(ids: PrerequisiteId[]): Promise<InstallPrerequisitesResult> {
+  return invoke<InstallPrerequisitesResult>("prerequisites_install", { request: { ids } });
+}
+
 export function listAccounts(): Promise<GhAccount[]> {
   return invoke<GhAccount[]>("accounts_list");
 }

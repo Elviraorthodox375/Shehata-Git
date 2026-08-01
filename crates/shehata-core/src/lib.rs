@@ -12,6 +12,7 @@ pub mod doctor;
 pub mod error;
 pub mod integrations;
 pub mod models;
+pub mod prerequisites;
 pub mod redact;
 pub mod repositories;
 pub mod routing;

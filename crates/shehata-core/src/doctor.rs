@@ -72,7 +72,7 @@ impl Doctor {
                 "git",
                 "Git",
                 "Git is not installed or not on PATH. Shehata Git drives the same git your terminal uses.",
-                "Install Git for Windows from https://git-scm.com/download/win, then restart Shehata Git.",
+                "Choose Set up this PC above to install Git automatically with Windows Package Manager.",
             ),
             Some(git) => match git.version().await {
                 Ok(version) => SystemCheck::ready(
@@ -101,7 +101,7 @@ impl Doctor {
                 "gh",
                 "GitHub CLI",
                 "GitHub CLI is not installed. It is the sign-in and credential source for all your GitHub accounts.",
-                "Run: winget install GitHub.cli — then restart Shehata Git.",
+                "Choose Set up this PC above to install GitHub CLI automatically with Windows Package Manager.",
             ),
             Some(gh) => match gh.version().await {
                 Ok(version) => SystemCheck::ready(
@@ -250,9 +250,7 @@ impl Doctor {
             );
         };
         let dir = exe.parent().map(|p| p.to_path_buf()).unwrap_or_default();
-        let on_path = std::env::var_os("PATH")
-            .map(|paths| std::env::split_paths(&paths).any(|p| p == dir))
-            .unwrap_or(false);
+        let on_path = directory_is_on_path(&dir);
         if on_path {
             SystemCheck::ready(
                 "path",
@@ -291,6 +289,40 @@ impl Doctor {
             ),
         }
     }
+}
+
+fn directory_is_on_path(directory: &std::path::Path) -> bool {
+    let expected = normalized_path(directory);
+    let process_has_path = std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|path| normalized_path(&path) == expected))
+        .unwrap_or(false);
+    if process_has_path {
+        return true;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::HKEY_CURRENT_USER;
+        use winreg::RegKey;
+
+        let user = RegKey::predef(HKEY_CURRENT_USER);
+        if let Ok(environment) = user.open_subkey("Environment") {
+            if let Ok(path) = environment.get_value::<String, _>("Path") {
+                return std::env::split_paths(&path)
+                    .any(|entry| normalized_path(&entry) == expected);
+            }
+        }
+    }
+
+    false
+}
+
+fn normalized_path(path: &std::path::Path) -> String {
+    path.to_string_lossy()
+        .trim()
+        .trim_matches('"')
+        .trim_end_matches(['\\', '/'])
+        .to_lowercase()
 }
 
 /// Find a binary next to the current executable first, then on PATH.
@@ -359,5 +391,13 @@ mod tests {
         assert_eq!(git.status, CheckStatus::Missing);
         assert!(git.repair_hint.is_some());
         assert!(!report.healthy);
+    }
+
+    #[test]
+    fn path_comparison_is_case_and_separator_insensitive() {
+        assert_eq!(
+            normalized_path(std::path::Path::new(r"C:\Program Files\Shehata Git\")),
+            normalized_path(std::path::Path::new(r"c:\program files\shehata git")),
+        );
     }
 }

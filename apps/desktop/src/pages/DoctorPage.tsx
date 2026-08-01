@@ -1,9 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { runDoctor } from "@/lib/tauri";
+import { installPrerequisites, type PrerequisiteId, runDoctor } from "@/lib/tauri";
 import type { CheckStatus, SystemCheck } from "@/lib/types";
 
 const STATUS_META: Record<
@@ -13,6 +22,11 @@ const STATUS_META: Record<
   ready: { label: "Ready", icon: CheckCircle2, badge: "success" },
   missing: { label: "Missing", icon: XCircle, badge: "destructive" },
   needs_attention: { label: "Needs attention", icon: AlertTriangle, badge: "warning" },
+};
+
+const INSTALLABLE_CHECKS: Record<string, PrerequisiteId> = {
+  git: "git",
+  gh: "github_cli",
 };
 
 function CheckCard({ check }: { check: SystemCheck }) {
@@ -46,7 +60,7 @@ function CheckCard({ check }: { check: SystemCheck }) {
       <CardContent className="space-y-2">
         <p className="text-sm text-muted-foreground">{check.detail}</p>
         {check.status !== "ready" && check.repair_hint && (
-          <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2">
+          <div className="rounded-[0.6rem] border border-warning/30 bg-warning/10 px-3 py-2">
             <p className="text-xs font-medium text-warning">How to fix</p>
             <p className="mt-0.5 text-sm text-foreground/90">{check.repair_hint}</p>
           </div>
@@ -57,11 +71,33 @@ function CheckCard({ check }: { check: SystemCheck }) {
 }
 
 export function DoctorPage() {
+  const queryClient = useQueryClient();
   const doctor = useQuery({ queryKey: ["doctor"], queryFn: runDoctor });
+  const installable = (doctor.data?.checks ?? [])
+    .filter((check) => check.status !== "ready" && INSTALLABLE_CHECKS[check.id])
+    .map((check) => INSTALLABLE_CHECKS[check.id]);
+  const setup = useMutation({
+    mutationFn: installPrerequisites,
+    onSuccess: async () => {
+      await Promise.all([
+        doctor.refetch(),
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+      ]);
+    },
+  });
+
+  async function confirmAutomaticSetup() {
+    const labels = installable.map((id) => (id === "git" ? "Git" : "GitHub CLI")).join(" and ");
+    const approved = await confirmDialog(
+      `Download and install ${labels} using Microsoft Windows Package Manager? Package and source agreements will be accepted for these exact packages only.`,
+      { title: "Set up this PC", kind: "info" },
+    );
+    if (approved) setup.mutate(installable);
+  }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-3xl space-y-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
           {doctor.data && (
             <p className="text-sm text-muted-foreground">
@@ -80,12 +116,53 @@ export function DoctorPage() {
           variant="outline"
           size="sm"
           onClick={() => doctor.refetch()}
-          disabled={doctor.isFetching}
+          disabled={doctor.isFetching || setup.isPending}
         >
           <RefreshCw className={doctor.isFetching ? "animate-spin" : undefined} aria-hidden />
           Re-check
         </Button>
       </div>
+
+      {installable.length > 0 && (
+        <section className="liquid-hero overflow-hidden rounded-[0.9rem] border border-primary/25 p-5 sm:p-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.7rem] border border-primary/25 bg-primary/10 text-primary">
+                <Download className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <p className="eyebrow">Automatic setup</p>
+                <h2 className="mt-1 font-display text-xl font-semibold">
+                  Let Shehata Git prepare this PC
+                </h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                  Downloads only the missing official Git tools through Microsoft WinGet, then
+                  checks the system again. Windows may ask for permission.
+                </p>
+              </div>
+            </div>
+            <Button onClick={confirmAutomaticSetup} disabled={setup.isPending} className="shrink-0">
+              {setup.isPending ? (
+                <Loader2 className="animate-spin" aria-hidden />
+              ) : (
+                <ShieldCheck aria-hidden />
+              )}
+              {setup.isPending ? "Installing…" : "Set up this PC"}
+            </Button>
+          </div>
+          {setup.isError && (
+            <p className="mt-4 rounded-[0.55rem] border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {setup.error instanceof Error ? setup.error.message : String(setup.error)}
+            </p>
+          )}
+          {setup.isSuccess && (
+            <p className="mt-4 rounded-[0.55rem] border border-success/25 bg-success/10 p-3 text-sm text-success">
+              Installed {setup.data.installed.map((tool) => tool.label).join(" and ")}. System check
+              refreshed.
+            </p>
+          )}
+        </section>
+      )}
 
       {doctor.isLoading && <p className="text-sm text-muted-foreground">Checking your system…</p>}
 

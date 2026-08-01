@@ -49,6 +49,12 @@ pub enum ShehataError {
     #[error("could not update repository marker: {0}")]
     RepositoryMarker(String),
 
+    #[error("Windows Package Manager (winget) is unavailable")]
+    PackageManagerMissing,
+
+    #[error("automatic setup failed for {tool} (installer exit code {code})")]
+    PrerequisiteInstallFailed { tool: String, code: i32 },
+
     // --- wrapped subsystem errors ---
     #[error(transparent)]
     Git(#[from] shehata_git::GitError),
@@ -83,6 +89,8 @@ impl ShehataError {
             Self::OperationBlocked(_) => "operation_blocked",
             Self::InvalidInput(_) => "invalid_input",
             Self::RepositoryMarker(_) => "repository_marker_error",
+            Self::PackageManagerMissing => "package_manager_missing",
+            Self::PrerequisiteInstallFailed { .. } => "prerequisite_install_failed",
             Self::Git(_) => "git_error",
             Self::RepositoryDiscovery(_) => "repository_discovery_error",
             Self::Github(_) => "github_cli_error",

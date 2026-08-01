@@ -86,6 +86,8 @@
 - ✅ Guided repository connection, safe diff workspace, and Smart Sync preview.
 - ✅ Liquid Glass appearance, density/transparency controls, responsive navigation,
   filtered audit timeline, AI-client detection, and safe diagnostic export.
+- ✅ One-click Windows prerequisite setup for exact allowlisted Git and GitHub
+  CLI packages, with live PATH refresh and automatic system re-check.
 - Test matrix completion, accessibility pass, hosted CI/draft release, code signing,
   and two-account manual acceptance remain.
 

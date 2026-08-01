@@ -5,6 +5,46 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — v0.1.1 automatic Windows setup and installer-state repair
+
+- Diagnosed the owner's misleading PATH warning: an earlier custom-directory
+  installer smoke test remained registered in Windows, so the later normal
+  setup correctly upgraded that registered location and its Start Menu shortcut
+  still targeted the workspace `tmp` directory.
+- Changed the Doctor PATH check to read the current-user registry PATH as well
+  as the process environment. This prevents a false warning when the app is
+  launched immediately after installation before its parent process inherits
+  the broadcast environment update.
+- Added shared-core automatic prerequisite installation with a closed enum and
+  exact fixed WinGet package mappings for `Git.Git` and `GitHub.cli`. The
+  frontend cannot supply commands, package identifiers, or extra arguments.
+- WinGet runs with exact package matching, the `winget` source, silent mode,
+  disabled interactivity, and explicit package/source agreement acceptance.
+  Raw installer output is discarded and never crosses the Tauri boundary.
+- Added a prominent **Set up this PC** action to System Check and first-run
+  onboarding. It explains the download, asks for confirmation, installs only
+  missing tools, refreshes the current process PATH from Windows, invalidates
+  account state, and re-runs Doctor.
+- Verified the live WinGet catalog resolves the reviewed identifiers to Git for
+  Windows 2.55.0.3 and GitHub CLI 2.97.0 on the test machine.
+- Bumped the application and installer version to 0.1.1 so Windows treats this
+  delivery as an explicit update rather than another ambiguous 0.1.0 build.
+- Final repository gate passed: workspace formatting, Clippy with warnings
+  denied, all 74 Rust tests, strict TypeScript, 3 frontend tests, and Biome
+  lint.
+- Built `target/release/bundle/nsis/Shehata Git_0.1.1_x64-setup.exe`
+  (5,190,106 bytes; SHA-256
+  `D435B4491DDE5B1D3644D974CC22D502359194FFBEF88AD1D854D0072E9BA658`).
+- Removed the stale smoke-test installation through its registered uninstaller,
+  corrected NSIS's persisted install-directory value, and installed 0.1.1 to
+  `C:\Users\moham\AppData\Local\Shehata Git`.
+- Verified one 0.1.1 uninstall registration, the Start Menu shortcut, all four
+  shipped executables, one correct PATH entry, absence of the smoke-test
+  directory, `shehata 0.1.1`, and a healthy installed Doctor report with all
+  eight checks ready.
+
+---
+
 ## 2026-08-01 — Phase 10 product experience and safe repository workspace
 
 - Reworked the desktop visual system into a restrained Liquid Glass workspace

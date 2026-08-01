@@ -187,7 +187,7 @@ export function SettingsPage({
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>Normal pushes only. Force push and remote deletion are never exposed.</p>
             <p>Tokens stay in GitHub CLI and are never written to the Shehata Git database.</p>
-            <p className="font-mono text-xs">Shehata Git v0.1.0 · Local-first · MIT</p>
+            <p className="font-mono text-xs">Shehata Git v0.1.1 · Local-first · MIT</p>
           </CardContent>
         </Card>
       </div>
