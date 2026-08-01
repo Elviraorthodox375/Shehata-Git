@@ -32,6 +32,16 @@ pub struct RepositoryActionStatus {
     pub changes: Vec<ChangeEntry>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct DiffSummary {
+    pub repository_id: String,
+    pub changed_paths: usize,
+    pub staged_paths: usize,
+    pub unstaged_paths: usize,
+    pub untracked_paths: usize,
+    pub conflict_paths: usize,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct PathsRequest {
     pub repository_id: String,
@@ -111,6 +121,56 @@ struct NetworkPlan {
 pub async fn status(repository_id: &str) -> Result<RepositoryActionStatus> {
     let db_path = Database::default_path()?;
     status_at(&db_path, repository_id).await
+}
+
+pub async fn diff_summary(repository_id: &str) -> Result<DiffSummary> {
+    let status = status(repository_id).await?;
+    Ok(summarize_status(status))
+}
+
+fn summarize_status(status: RepositoryActionStatus) -> DiffSummary {
+    let staged_paths = status
+        .changes
+        .iter()
+        .filter(|change| change.index_status != " " && change.index_status != "?")
+        .count();
+    let unstaged_paths = status
+        .changes
+        .iter()
+        .filter(|change| change.worktree_status != " " && change.worktree_status != "?")
+        .count();
+    let untracked_paths = status
+        .changes
+        .iter()
+        .filter(|change| change.index_status == "?" && change.worktree_status == "?")
+        .count();
+    let conflict_paths = status
+        .changes
+        .iter()
+        .filter(|change| {
+            matches!(
+                (
+                    change.index_status.as_str(),
+                    change.worktree_status.as_str()
+                ),
+                ("D", "D")
+                    | ("A", "U")
+                    | ("U", "D")
+                    | ("U", "A")
+                    | ("D", "U")
+                    | ("A", "A")
+                    | ("U", "U")
+            )
+        })
+        .count();
+    DiffSummary {
+        repository_id: status.repository_id,
+        changed_paths: status.changes.len(),
+        staged_paths,
+        unstaged_paths,
+        untracked_paths,
+        conflict_paths,
+    }
 }
 
 pub fn set_push_policy(request: SetPushPolicyRequest) -> Result<PushPolicyResult> {
@@ -980,6 +1040,8 @@ mod tests {
         fs::write(repo.join("hello.txt"), "hello").unwrap();
         let before = status_at(&db_path, &id).await.unwrap();
         assert_eq!(before.changes[0].worktree_status, "?");
+        let summary = summarize_status(before.clone());
+        assert_eq!(summary.untracked_paths, 1);
         stage_at(
             &db_path,
             PathsRequest {

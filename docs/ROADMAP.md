@@ -69,9 +69,13 @@
 - ✅ CLI contract tests and fixed MCP launcher.
 - Installer/PATH integration remains for Phase 10.
 
-## Phase 9 — MCP ⬜
+## Phase 9 — MCP 🚧
 
-- Full tool set live, MCP inspector verified, AGENTS.md generation.
+- ✅ Full reviewed 11-tool stdio surface calls shared core logic.
+- ✅ Stable envelopes, strict repository inputs, and AI push-policy enforcement.
+- ✅ Real protocol initialize/list/call contract test.
+- ✅ Exact command/config UI and bounded AGENTS.md generation.
+- External MCP Inspector/client acceptance remains for packaged binaries.
 
 ## Phase 10 — Quality & release ⬜
 

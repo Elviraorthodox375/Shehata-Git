@@ -5,6 +5,21 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 9 safe native MCP surface
+
+- Replaced every MCP milestone placeholder with shared-core implementations for status, diff counts, identity, connection test, explicit-path commit, pull `--ff-only`, and normal push.
+- MCP commit stages only explicit repository-relative paths. It never exposes arbitrary shell, force push, remote deletion, amend, rebase, hard reset, or clean.
+- MCP push always identifies its caller as AI and always passes `approved=false`; `ask_before_push` returns `approval_required`, while `block_ai_push` returns `operation_blocked`.
+- Repository arguments use strict schemas and require exactly one UUID or path. Domain failures return the stable `{ ok, code, summary, data }` envelope.
+- Diff summary returns counts only and never returns file contents. Tokens remain inside the credential helper/GitHub CLI path and never enter tool results.
+- Added a process-level MCP protocol contract test that initializes the real stdio server, lists exactly the reviewed 11-tool surface, rejects force/shell/reset/delete tool exposure, invokes a tool, and validates its structured credential-free error envelope.
+- Added recoverable bounded AGENTS.md generation that preserves existing project instructions, updates only the marked Shehata Git block, rejects malformed/duplicate markers, and keeps a temporary rollback file until replacement succeeds.
+- Added the desktop repository selector and Generate AGENTS.md control; the existing page continues to show the exact MCP executable and copyable client configuration.
+- External MCP Inspector/client acceptance remains pending the packaged binaries.
+- Final repository gate passed: workspace formatting, clippy with warnings denied, all 67 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+
+---
+
 ## 2026-08-01 — Phase 8 native CLI commands
 
 - Replaced CLI milestone placeholders with commands that call the same shared Rust core as the desktop.

@@ -14,10 +14,12 @@ use rmcp::{
     ErrorData as McpError, Json, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
-use shehata_core::{accounts as core_accounts, Doctor, ShehataError};
-use shehata_git::GitRunner;
+use shehata_core::{
+    accounts as core_accounts, actions as core_actions, repositories as core_repositories,
+    routing as core_routing, Doctor, ShehataError,
+};
 use shehata_github::GhRunner;
-use shehata_storage::{queries, Database};
+use shehata_storage::Database;
 
 // ------------------------------------------------------------------ envelope
 
@@ -50,22 +52,12 @@ impl Envelope {
             data: None,
         }
     }
-
-    fn not_implemented(feature: &str) -> Self {
-        Self {
-            ok: false,
-            code: "not_implemented".to_string(),
-            summary: format!(
-                "{feature} is not available yet in this build. See docs/ROADMAP.md for the milestone plan."
-            ),
-            data: None,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------- args
 
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 struct RepositoryArgs {
     /// The Shehata Git repository id (UUID). Provide this or `path`.
     #[serde(default)]
@@ -73,6 +65,43 @@ struct RepositoryArgs {
     /// The repository's canonical path. Provide this or `repository_id`.
     #[serde(default)]
     path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct CommitArgs {
+    /// The Shehata Git repository id (UUID). Provide this or `path`.
+    #[serde(default)]
+    repository_id: Option<String>,
+    /// The repository's canonical path. Provide this or `repository_id`.
+    #[serde(default)]
+    path: Option<String>,
+    /// Normal commit message. Amend is never supported.
+    message: String,
+    /// Repository-relative paths to stage before committing.
+    paths: Vec<String>,
+}
+
+fn repository_reference(args: &RepositoryArgs) -> Result<&str, McpError> {
+    match (&args.repository_id, &args.path) {
+        (Some(id), None) if !id.trim().is_empty() => Ok(id),
+        (None, Some(path)) if !path.trim().is_empty() => Ok(path),
+        _ => Err(McpError::invalid_params(
+            "provide exactly one of repository_id or path",
+            None,
+        )),
+    }
+}
+
+async fn resolve_repository_id(
+    args: &RepositoryArgs,
+) -> Result<std::result::Result<String, ShehataError>, McpError> {
+    let reference = repository_reference(args)?;
+    Ok(
+        core_repositories::resolve_repository_reference(Some(reference))
+            .await
+            .map(|repository| repository.id),
+    )
 }
 
 // --------------------------------------------------------------------- state
@@ -165,21 +194,12 @@ impl ShehataMcp {
         description = "List repositories linked to Shehata Git with their assigned accounts"
     )]
     async fn list_repositories(&self) -> Result<Json<Envelope>, McpError> {
-        let db = self.open_db()?;
-        match queries::list_repositories(&db) {
+        match core_repositories::list_repository_summaries_with_routing().await {
             Ok(repos) => {
                 let summary = format!("{} linked repositorie(s)", repos.len());
                 Ok(Json(Envelope::success(summary, repos)?))
             }
-            Err(e) => {
-                let err = ShehataError::Storage(e);
-                Ok(Json(Envelope {
-                    ok: false,
-                    code: err.code().to_string(),
-                    summary: err.to_string(),
-                    data: Some(serde_json::json!([])),
-                }))
-            }
+            Err(error) => Ok(Json(Envelope::failure(&error))),
         }
     }
 
@@ -192,29 +212,24 @@ impl ShehataMcp {
         &self,
         Parameters(args): Parameters<RepositoryArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        if args.repository_id.is_none() && args.path.is_none() {
-            return Err(McpError::invalid_params(
-                "provide repository_id or path",
-                None,
-            ));
-        }
-        let db = self.open_db()?;
-        let repo = match (&args.repository_id, &args.path) {
-            (Some(id), _) => queries::find_repository_by_id(&db, id),
-            (None, Some(path)) => queries::find_repository_by_path(&db, path),
-            (None, None) => unreachable!("validated above"),
+        let repository_id = match resolve_repository_id(&args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
         };
-        match repo {
-            Ok(Some(repo)) => Ok(Json(Envelope::success(
-                format!("repository {}", repo.display_name),
-                repo,
-            )?)),
-            Ok(None) => Ok(Json(Envelope::failure(&ShehataError::RepositoryNotFound(
-                args.repository_id
-                    .or(args.path)
-                    .unwrap_or_else(|| "unknown".to_string()),
-            )))),
-            Err(e) => Ok(Json(Envelope::failure(&ShehataError::Storage(e)))),
+        match core_repositories::list_repository_summaries_with_routing().await {
+            Ok(repositories) => match repositories
+                .into_iter()
+                .find(|repository| repository.id == repository_id)
+            {
+                Some(repository) => Ok(Json(Envelope::success(
+                    format!("repository {}", repository.display_name),
+                    repository,
+                )?)),
+                None => Ok(Json(Envelope::failure(&ShehataError::RepositoryNotFound(
+                    repository_id,
+                )))),
+            },
+            Err(error) => Ok(Json(Envelope::failure(&error))),
         }
     }
 
@@ -228,101 +243,77 @@ impl ShehataMcp {
         &self,
         Parameters(args): Parameters<RepositoryArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        // Finish all SQLite work before awaiting git so the non-Sync
-        // rusqlite connection never lives across an await point.
-        let (repo, assigned_login) = {
-            let db = self.open_db()?;
-            let repo = match (&args.repository_id, &args.path) {
-                (Some(id), _) => queries::find_repository_by_id(&db, id),
-                (None, Some(path)) => queries::find_repository_by_path(&db, path),
-                (None, None) => {
-                    return Err(McpError::invalid_params(
-                        "provide repository_id or path",
-                        None,
-                    ))
-                }
-            };
-            let repo = match repo {
-                Ok(Some(repo)) => repo,
-                Ok(None) => {
-                    return Ok(Json(Envelope::failure(&ShehataError::RepositoryNotFound(
-                        args.repository_id
-                            .or(args.path)
-                            .unwrap_or_else(|| "unknown".to_string()),
-                    ))))
-                }
-                Err(e) => return Ok(Json(Envelope::failure(&ShehataError::Storage(e)))),
-            };
-
-            let assigned_login = match repo.assigned_account_id {
-                Some(id) => queries::find_account_by_id(&db, id)
-                    .ok()
-                    .flatten()
-                    .map(|a| format!("{}:{}", a.host, a.login)),
-                None => None,
-            };
-            (repo, assigned_login)
+        let repository_id = match resolve_repository_id(&args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
         };
-
-        // Read repository-local identity via git (read-only).
-        let mut local_name = None;
-        let mut local_email = None;
-        if let Ok(git) = GitRunner::locate() {
-            let dir = std::path::Path::new(&repo.canonical_path);
-            if let Ok(out) = git
-                .run_in(Some(dir), &["config", "--local", "--get", "user.name"])
-                .await
-            {
-                if out.success() {
-                    local_name = Some(out.stdout.trim().to_string());
-                }
-            }
-            if let Ok(out) = git
-                .run_in(Some(dir), &["config", "--local", "--get", "user.email"])
-                .await
-            {
-                if out.success() {
-                    local_email = Some(out.stdout.trim().to_string());
-                }
-            }
-        }
-
+        let repositories = match core_repositories::list_repository_summaries_with_routing().await {
+            Ok(repositories) => repositories,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
+        };
+        let Some(repository) = repositories
+            .into_iter()
+            .find(|repository| repository.id == repository_id)
+        else {
+            return Ok(Json(Envelope::failure(&ShehataError::RepositoryNotFound(
+                repository_id,
+            ))));
+        };
         let data = serde_json::json!({
-            "repository": repo.display_name,
-            "assigned_account": assigned_login,
-            "local_user_name": local_name,
-            "local_user_email": local_email,
-            "push_policy": repo.push_policy,
+            "repository": repository.display_name,
+            "assigned_account": repository.assigned_login,
+            "local_user_name": repository.commit_name,
+            "local_user_email": repository.commit_email,
+            "push_policy": repository.push_policy,
+            "routing_configured": repository.routing_configured,
         });
-        let summary = match &assigned_login {
+        let summary = match &repository.assigned_login {
             Some(account) => format!("pushes authenticate as {account}"),
             None => "no account assigned yet".to_string(),
         };
         Ok(Json(Envelope::success(summary, data)?))
     }
 
-    // ----- milestones below return honest not_implemented envelopes -----
-
     #[tool(
         name = "shehata_git_status",
-        description = "Working-tree status of a linked repository [Phase 7]"
+        description = "Working-tree status of a linked repository without file contents"
     )]
     async fn status(
         &self,
-        Parameters(_args): Parameters<RepositoryArgs>,
+        Parameters(args): Parameters<RepositoryArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        Ok(Json(Envelope::not_implemented("git status")))
+        let repository_id = match resolve_repository_id(&args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
+        };
+        match core_actions::status(&repository_id).await {
+            Ok(status) => {
+                let summary = format!("{} changed path(s)", status.changes.len());
+                Ok(Json(Envelope::success(summary, status)?))
+            }
+            Err(error) => Ok(Json(Envelope::failure(&error))),
+        }
     }
 
     #[tool(
         name = "shehata_git_diff_summary",
-        description = "Summary of uncommitted changes [Phase 7]"
+        description = "Counts of staged, unstaged, untracked, and conflicting paths; no file contents"
     )]
     async fn diff_summary(
         &self,
-        Parameters(_args): Parameters<RepositoryArgs>,
+        Parameters(args): Parameters<RepositoryArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        Ok(Json(Envelope::not_implemented("diff summary")))
+        let repository_id = match resolve_repository_id(&args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
+        };
+        match core_actions::diff_summary(&repository_id).await {
+            Ok(summary) => Ok(Json(Envelope::success(
+                format!("{} changed path(s)", summary.changed_paths),
+                summary,
+            )?)),
+            Err(error) => Ok(Json(Envelope::failure(&error))),
+        }
     }
 
     #[tool(
@@ -331,42 +322,101 @@ impl ShehataMcp {
     )]
     async fn test_connection(
         &self,
-        Parameters(_args): Parameters<RepositoryArgs>,
+        Parameters(args): Parameters<RepositoryArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        Ok(Json(Envelope::not_implemented("connection test")))
+        let repository_id = match resolve_repository_id(&args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
+        };
+        match core_routing::test_connection(&repository_id).await {
+            Ok(result) => Ok(Json(Envelope::success(
+                format!("connection verified through @{}", result.account_login),
+                result,
+            )?)),
+            Err(error) => Ok(Json(Envelope::failure(&error))),
+        }
     }
 
     #[tool(
         name = "shehata_git_commit",
-        description = "Create a normal commit [Phase 7]"
+        description = "Stage explicit repository-relative paths and create a normal commit; amend is unavailable"
     )]
     async fn commit(
         &self,
-        Parameters(_args): Parameters<RepositoryArgs>,
+        Parameters(args): Parameters<CommitArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        Ok(Json(Envelope::not_implemented("commit")))
+        let repository_args = RepositoryArgs {
+            repository_id: args.repository_id,
+            path: args.path,
+        };
+        let repository_id = match resolve_repository_id(&repository_args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
+        };
+        if let Err(error) = core_actions::stage(core_actions::PathsRequest {
+            repository_id: repository_id.clone(),
+            paths: args.paths,
+        })
+        .await
+        {
+            return Ok(Json(Envelope::failure(&error)));
+        }
+        match core_actions::commit(core_actions::CommitRequest {
+            repository_id,
+            message: args.message,
+        })
+        .await
+        {
+            Ok(result) => Ok(Json(Envelope::success("normal commit created", result)?)),
+            Err(error) => Ok(Json(Envelope::failure(&error))),
+        }
     }
 
     #[tool(
         name = "shehata_git_pull_ff_only",
-        description = "Pull with --ff-only [Phase 7]"
+        description = "Pull the existing upstream with --ff-only after identity preflight"
     )]
     async fn pull_ff_only(
         &self,
-        Parameters(_args): Parameters<RepositoryArgs>,
+        Parameters(args): Parameters<RepositoryArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        Ok(Json(Envelope::not_implemented("pull --ff-only")))
+        let repository_id = match resolve_repository_id(&args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
+        };
+        match core_actions::pull_ff_only(core_actions::RepositoryActionRequest { repository_id })
+            .await
+        {
+            Ok(result) => Ok(Json(Envelope::success(
+                "fast-forward pull completed",
+                result,
+            )?)),
+            Err(error) => Ok(Json(Envelope::failure(&error))),
+        }
     }
 
     #[tool(
         name = "shehata_git_push",
-        description = "Normal push with full preflight through the assigned account [Phase 7]"
+        description = "Normal push with full preflight; force is unavailable and approval policies are never bypassed"
     )]
     async fn push(
         &self,
-        Parameters(_args): Parameters<RepositoryArgs>,
+        Parameters(args): Parameters<RepositoryArgs>,
     ) -> Result<Json<Envelope>, McpError> {
-        Ok(Json(Envelope::not_implemented("push")))
+        let repository_id = match resolve_repository_id(&args).await? {
+            Ok(id) => id,
+            Err(error) => return Ok(Json(Envelope::failure(&error))),
+        };
+        match core_actions::push(core_actions::PushRequest {
+            repository_id,
+            caller: core_actions::ActionCaller::Mcp,
+            approved: false,
+        })
+        .await
+        {
+            Ok(result) => Ok(Json(Envelope::success("normal push completed", result)?)),
+            Err(error) => Ok(Json(Envelope::failure(&error))),
+        }
     }
 }
 

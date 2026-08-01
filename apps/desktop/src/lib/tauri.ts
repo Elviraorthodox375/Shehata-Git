@@ -110,10 +110,22 @@ export function getMcpInfo(): Promise<McpInfo> {
   return invoke<McpInfo>("mcp_info");
 }
 
+export function generateRepositoryAgents(repositoryId: string): Promise<GenerateAgentsResult> {
+  return invoke<GenerateAgentsResult>("repositories_generate_agents", {
+    request: { repository_id: repositoryId },
+  });
+}
+
 export interface McpInfo {
   executable_path: string | null;
   available: boolean;
   config_snippet: string;
+}
+
+export interface GenerateAgentsResult {
+  repository_id: string;
+  path: string;
+  created: boolean;
 }
 
 export interface AssignRepositoryRequest {

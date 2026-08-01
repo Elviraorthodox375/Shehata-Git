@@ -6,8 +6,9 @@
 
 use serde::Serialize;
 use shehata_core::{
-    accounts as core_accounts, actions as core_actions, assignment as core_assignment,
-    repositories as core_repositories, routing as core_routing, Doctor,
+    accounts as core_accounts, actions as core_actions, agents as core_agents,
+    assignment as core_assignment, repositories as core_repositories, routing as core_routing,
+    Doctor,
 };
 use shehata_github::{GhLoginEvent, GhRunner};
 use shehata_storage::{queries, Database};
@@ -208,6 +209,14 @@ fn mcp_info() -> McpInfo {
     }
 }
 
+#[tauri::command]
+fn repositories_generate_agents(
+    request: core_agents::GenerateAgentsRequest,
+) -> Result<core_agents::GenerateAgentsResult, String> {
+    core_agents::generate_agents(request)
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
 fn locate_mcp_binary() -> Option<std::path::PathBuf> {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
@@ -245,6 +254,7 @@ pub fn run() {
             repositories_set_push_policy,
             audit_list,
             mcp_info,
+            repositories_generate_agents,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Shehata Git");

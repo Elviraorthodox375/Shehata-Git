@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
-import { Bot, CheckCircle2, Copy, XCircle } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Bot, CheckCircle2, Copy, FileCode2, Loader2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getMcpInfo } from "@/lib/tauri";
+import { generateRepositoryAgents, getMcpInfo, listRepositories } from "@/lib/tauri";
 
 /**
  * AI Integration page.
@@ -14,7 +14,11 @@ import { getMcpInfo } from "@/lib/tauri";
  */
 export function AiIntegrationPage() {
   const mcp = useQuery({ queryKey: ["mcp-info"], queryFn: getMcpInfo });
+  const repositories = useQuery({ queryKey: ["repositories"], queryFn: listRepositories });
   const [copied, setCopied] = useState(false);
+  const [repositoryId, setRepositoryId] = useState("");
+  const generateAgents = useMutation({ mutationFn: generateRepositoryAgents });
+  const selectedId = repositoryId || repositories.data?.[0]?.id || "";
 
   async function copyConfig() {
     if (!mcp.data) return;
@@ -74,6 +78,65 @@ export function AiIntegrationPage() {
                 {mcp.data.config_snippet}
               </pre>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2.5">
+            <FileCode2 className="h-5 w-5 text-primary" aria-hidden />
+            <CardTitle>Repository instructions</CardTitle>
+          </div>
+          <CardDescription>
+            Add or safely update the bounded Shehata Git section in AGENTS.md without replacing
+            existing project instructions.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select
+              value={selectedId}
+              onChange={(event) => {
+                setRepositoryId(event.target.value);
+                generateAgents.reset();
+              }}
+              disabled={!repositories.data?.length || generateAgents.isPending}
+              className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm outline-none focus:border-primary"
+            >
+              {repositories.data?.length ? (
+                repositories.data.map((repository) => (
+                  <option key={repository.id} value={repository.id}>
+                    {repository.display_name} — {repository.canonical_path}
+                  </option>
+                ))
+              ) : (
+                <option value="">No registered repositories</option>
+              )}
+            </select>
+            <Button
+              onClick={() => generateAgents.mutate(selectedId)}
+              disabled={!selectedId || generateAgents.isPending}
+            >
+              {generateAgents.isPending ? (
+                <Loader2 className="animate-spin" aria-hidden />
+              ) : (
+                <FileCode2 aria-hidden />
+              )}
+              Generate AGENTS.md
+            </Button>
+          </div>
+          {generateAgents.data && (
+            <p className="text-sm text-success">
+              {generateAgents.data.created ? "Created" : "Updated"}: {generateAgents.data.path}
+            </p>
+          )}
+          {generateAgents.isError && (
+            <p className="text-sm text-destructive">
+              {generateAgents.error instanceof Error
+                ? generateAgents.error.message
+                : String(generateAgents.error)}
+            </p>
           )}
         </CardContent>
       </Card>

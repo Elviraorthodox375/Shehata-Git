@@ -5,6 +5,7 @@
 
 pub mod accounts;
 pub mod actions;
+pub mod agents;
 pub mod assignment;
 pub mod doctor;
 pub mod error;
