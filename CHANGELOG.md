@@ -4,6 +4,22 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- First-publish support: pushing a branch that has never been pushed now
+  creates the remote branch and records it as upstream in one safe step,
+  instead of failing with `no_upstream`. Smart Sync previews such branches
+  as ahead-only.
+- macOS CI build producing an unsigned `.dmg` artifact on every push.
+
+### Fixed
+
+- Pushes rejected by GitHub for a token missing the `workflow` scope now
+  surface a clear, actionable message instead of a raw git error, and the
+  Doctor flags signed-in accounts whose token lacks that scope.
+
 ## 0.1.6 - 2026-08-01
 
 ### Added

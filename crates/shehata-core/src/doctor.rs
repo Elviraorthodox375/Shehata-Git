@@ -145,15 +145,43 @@ impl Doctor {
                         None,
                     )
                 } else {
-                    SystemCheck::ready(
-                        "gh-accounts",
-                        "GitHub accounts",
-                        format!(
-                            "{count} account{} signed in.",
-                            if count == 1 { "" } else { "s" }
-                        ),
-                        None,
-                    )
+                    let missing_workflow: Vec<String> = status
+                        .hosts
+                        .values()
+                        .flatten()
+                        .filter(|account| {
+                            account.token_usable()
+                                && !account.scopes.trim().is_empty()
+                                && !account
+                                    .scopes
+                                    .split(',')
+                                    .any(|scope| scope.trim() == "workflow")
+                        })
+                        .map(|account| format!("@{}", account.login))
+                        .collect();
+                    if missing_workflow.is_empty() {
+                        SystemCheck::ready(
+                            "gh-accounts",
+                            "GitHub accounts",
+                            format!(
+                                "{count} account{} signed in.",
+                                if count == 1 { "" } else { "s" }
+                            ),
+                            None,
+                        )
+                    } else {
+                        SystemCheck::attention(
+                            "gh-accounts",
+                            "GitHub accounts",
+                            format!(
+                                "{count} account{} signed in, but {} missing the `workflow` scope — GitHub rejects pushes that change .github/workflows files.",
+                                if count == 1 { "" } else { "s" },
+                                missing_workflow.join(", ")
+                            ),
+                            "Make the listed account active, then run: gh auth refresh -h github.com -s workflow — repeat per account.",
+                            None,
+                        )
+                    }
                 }
             }
             Err(_) => SystemCheck::attention(

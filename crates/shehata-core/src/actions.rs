@@ -147,6 +147,9 @@ struct NetworkPlan {
     branch: String,
     ahead: usize,
     behind: usize,
+    /// True when the branch has never been published: the push must create
+    /// the remote branch and record it as upstream in one step.
+    set_upstream: bool,
 }
 
 pub async fn status(repository_id: &str) -> Result<RepositoryActionStatus> {
@@ -268,7 +271,7 @@ async fn sync_preview_at(
     repository_id: &str,
     check_token: bool,
 ) -> Result<SyncPreview> {
-    let plan = prepare_network_plan(db_path, repository_id, None, false, check_token).await?;
+    let plan = prepare_network_plan(db_path, repository_id, None, false, check_token, true).await?;
     Ok(SyncPreview {
         repository_id: plan.repository.id,
         remote_name: plan.remote_name,
@@ -493,8 +496,15 @@ async fn pull_ff_only_at(
     check_token: bool,
 ) -> Result<NetworkActionResult> {
     let started = Instant::now();
-    let plan =
-        prepare_network_plan(db_path, &request.repository_id, None, false, check_token).await?;
+    let plan = prepare_network_plan(
+        db_path,
+        &request.repository_id,
+        None,
+        false,
+        check_token,
+        false,
+    )
+    .await?;
     let git = GitRunner::locate()?;
     let path = Path::new(&plan.repository.canonical_path);
     let result = execute_pull(&git, path, &plan.remote_name, &plan.remote_branch).await;
@@ -518,6 +528,7 @@ async fn push_at(
         Some(request.caller),
         request.approved,
         check_token,
+        true,
     )
     .await;
     let plan = match plan_result {
@@ -551,7 +562,14 @@ async fn push_at(
     )?;
     let git = GitRunner::locate()?;
     let path = Path::new(&plan.repository.canonical_path);
-    let result = execute_push(&git, path, &plan.remote_name, &plan.remote_branch).await;
+    let result = execute_push(
+        &git,
+        path,
+        &plan.remote_name,
+        &plan.remote_branch,
+        plan.set_upstream,
+    )
+    .await;
     finish_network_action(db_path, plan, "push", result, started).await
 }
 
@@ -561,6 +579,7 @@ async fn prepare_network_plan(
     push_caller: Option<ActionCaller>,
     approved: bool,
     check_token: bool,
+    allow_missing_upstream: bool,
 ) -> Result<NetworkPlan> {
     let (repository, account) = load_linked_repository(db_path, repository_id)?;
     let repo_path = Path::new(&repository.canonical_path);
@@ -612,14 +631,26 @@ async fn prepare_network_plan(
             ],
         )
         .await?;
-    if !upstream_output.success() {
+    let (remote_name, remote_branch, set_upstream) = if upstream_output.success() {
+        let upstream = upstream_output.stdout.trim();
+        let (remote, tracked) = upstream
+            .split_once('/')
+            .filter(|(remote, branch)| !remote.is_empty() && !branch.is_empty())
+            .ok_or(ShehataError::NoUpstream)?;
+        (remote.to_string(), tracked.to_string(), false)
+    } else if allow_missing_upstream {
+        // First publish: no upstream exists yet, so route through the
+        // registered remote and let the push create the tracking branch.
+        let remote = repository
+            .remote_name
+            .clone()
+            .ok_or(ShehataError::NoUpstream)?;
+        (remote, branch.clone(), true)
+    } else {
         return Err(ShehataError::NoUpstream);
-    }
-    let upstream = upstream_output.stdout.trim();
-    let (remote_name, remote_branch) = upstream
-        .split_once('/')
-        .filter(|(remote, branch)| !remote.is_empty() && !branch.is_empty())
-        .ok_or(ShehataError::NoUpstream)?;
+    };
+    let remote_name = remote_name.as_str();
+    let remote_branch = remote_branch.as_str();
     validate_remote_name(remote_name)?;
     validate_git_ref(&git, repo_path, remote_branch).await?;
 
@@ -654,16 +685,50 @@ async fn prepare_network_plan(
         &["fetch", "--quiet", "--prune", remote_name],
     )
     .await?;
-    let counts = git
-        .run_in(
-            Some(repo_path),
-            &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
-        )
-        .await?;
-    if !counts.success() {
-        return Err(ShehataError::NoUpstream);
-    }
-    let (ahead, behind) = parse_ahead_behind(&counts.stdout)?;
+    let (ahead, behind) = if set_upstream {
+        let remote_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
+        let remote_exists = git
+            .run_in(
+                Some(repo_path),
+                &["rev-parse", "--quiet", "--verify", &remote_ref],
+            )
+            .await?
+            .success();
+        if remote_exists {
+            let range = format!("HEAD...{remote_ref}");
+            let counts = git
+                .run_in(
+                    Some(repo_path),
+                    &["rev-list", "--left-right", "--count", &range],
+                )
+                .await?;
+            if !counts.success() {
+                return Err(ShehataError::NoUpstream);
+            }
+            parse_ahead_behind(&counts.stdout)?
+        } else {
+            // The remote branch does not exist yet: every local commit is
+            // ahead and nothing can be behind.
+            let commits = git
+                .run_checked(Some(repo_path), &["rev-list", "--count", "HEAD"])
+                .await?;
+            let ahead = commits.stdout.trim().parse::<usize>().map_err(|_| {
+                ShehataError::InvalidInput("could not count local commits".to_string())
+            })?;
+            (ahead, 0)
+        }
+    } else {
+        let counts = git
+            .run_in(
+                Some(repo_path),
+                &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+            )
+            .await?;
+        if !counts.success() {
+            return Err(ShehataError::NoUpstream);
+        }
+        parse_ahead_behind(&counts.stdout)?
+    };
 
     if push_caller.is_some() && behind > 0 {
         return Err(ShehataError::NonFastForward);
@@ -680,6 +745,7 @@ async fn prepare_network_plan(
         branch,
         ahead,
         behind,
+        set_upstream,
     })
 }
 
@@ -737,6 +803,19 @@ async fn finish_network_action(
                 git_error_code(&error),
                 started,
             )?;
+            if action == "push" {
+                if let GitError::Exit { message, .. } = &error {
+                    if message.contains("workflow` scope") {
+                        return Err(ShehataError::OperationBlocked(
+                            "GitHub rejected the push because this account's token lacks the \
+                             `workflow` scope needed to update .github/workflows files. Run \
+                             `gh auth refresh -h github.com -s workflow`, approve in the \
+                             browser, then push again."
+                                .to_string(),
+                        ));
+                    }
+                }
+            }
             Err(error.into())
         }
     }
@@ -856,13 +935,16 @@ async fn execute_push(
     repo_path: &Path,
     remote_name: &str,
     remote_branch: &str,
+    set_upstream: bool,
 ) -> std::result::Result<shehata_git::CommandOutput, GitError> {
     let destination = format!("HEAD:refs/heads/{remote_branch}");
-    git.run_checked(
-        Some(repo_path),
-        &["push", "--porcelain", remote_name, &destination],
-    )
-    .await
+    let mut args = vec!["push", "--porcelain"];
+    if set_upstream {
+        args.push("--set-upstream");
+    }
+    args.push(remote_name);
+    args.push(&destination);
+    git.run_checked(Some(repo_path), &args).await
 }
 
 async fn run_paths_action(
@@ -1431,12 +1513,58 @@ mod tests {
         fs::write(first.join("three.txt"), "three").unwrap();
         git(&first, &["add", "--", "three.txt"]);
         git(&first, &["commit", "-m", "feat: third"]);
-        execute_push(&runner, &first, "origin", "main")
+        execute_push(&runner, &first, "origin", "main", false)
             .await
             .unwrap();
         assert_eq!(
             git_output(&first, &["rev-parse", "HEAD"]),
             git_output(&remote, &["rev-parse", "refs/heads/main"])
+        );
+    }
+
+    #[tokio::test]
+    async fn first_push_publishes_branch_and_sets_upstream() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        assert!(Command::new("git")
+            .args(["init", "--bare"])
+            .arg(&remote)
+            .status()
+            .unwrap()
+            .success());
+
+        let local = temp.path().join("local");
+        fs::create_dir(&local).unwrap();
+        git(&local, &["init", "--initial-branch=main"]);
+        git(&local, &["config", "user.name", "First User"]);
+        git(&local, &["config", "user.email", "first@example.com"]);
+        fs::write(local.join("one.txt"), "one").unwrap();
+        git(&local, &["add", "--", "one.txt"]);
+        git(&local, &["commit", "-m", "feat: first"]);
+        git(
+            &local,
+            &["remote", "add", "origin", &remote.to_string_lossy()],
+        );
+
+        let runner = GitRunner::locate().unwrap();
+        execute_push(&runner, &local, "origin", "main", true)
+            .await
+            .unwrap();
+        assert_eq!(
+            git_output(&local, &["rev-parse", "HEAD"]),
+            git_output(&remote, &["rev-parse", "refs/heads/main"])
+        );
+        assert_eq!(
+            git_output(
+                &local,
+                &[
+                    "rev-parse",
+                    "--abbrev-ref",
+                    "--symbolic-full-name",
+                    "@{upstream}"
+                ]
+            ),
+            "origin/main"
         );
     }
 }
