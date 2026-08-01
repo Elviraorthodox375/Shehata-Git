@@ -12,7 +12,7 @@ import { RepositoryDetailPage } from "@/pages/RepositoryDetailPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 
 const PAGE_META: Record<PageId, { title: string; description: string }> = {
-  home: { title: "Overview", description: "Live identity-routing state" },
+  home: { title: "Overview", description: "Current identity-routing state" },
   accounts: { title: "Identities", description: "GitHub accounts available on this machine" },
   repositories: {
     title: "Repositories",

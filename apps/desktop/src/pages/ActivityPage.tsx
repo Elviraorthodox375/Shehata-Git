@@ -21,7 +21,17 @@ type ResultFilter = "all" | "success" | "failed";
 
 export function ActivityPage() {
   const queryClient = useQueryClient();
-  const events = useQuery({ queryKey: ["audit"], queryFn: listAuditEvents });
+  // The audit trail is the one surface users expect to be live: actions can
+  // arrive from a terminal or a coding agent while this page is open. It reads
+  // the local database only — no git or gh process is launched — so a short
+  // poll while the page is visible is cheap.
+  const events = useQuery({
+    queryKey: ["audit"],
+    queryFn: listAuditEvents,
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+  });
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<ResultFilter>("all");
   const [deleteTarget, setDeleteTarget] = useState<AuditEvent | "all" | null>(null);
