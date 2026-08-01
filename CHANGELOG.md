@@ -4,6 +4,19 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.8 - 2026-08-01
+
+### Changed
+
+- The audit trail now refreshes itself every few seconds while the page is
+  open, so actions performed from a terminal or a coding agent appear without
+  a manual refresh. Polling stops while the window is in the background, and
+  it reads only the local database — no Git or GitHub CLI process is launched.
+- Overview no longer describes its state as "live", which promised realtime
+  updates the app does not perform.
+- Documentation leads with the problem the app solves, links directly to the
+  Windows and macOS installers, and shows real product screenshots.
+
 ## 0.1.7 - 2026-08-01
 
 ### Added
