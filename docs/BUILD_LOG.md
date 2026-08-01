@@ -5,6 +5,41 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — v0.1.4 complete account controls
+
+- Added exact-account removal through shared Rust business logic and GitHub
+  CLI's fixed `auth logout --hostname <host> --user <login>` arguments.
+  Validation and the no-console runner remain in force; raw CLI output never
+  reaches the frontend.
+- Account removal signs the selected identity out of GitHub CLI on this PC
+  only. It does not revoke GitHub's OAuth grant, and repository assignments are
+  deliberately retained so they cannot silently fall through to another
+  account.
+- Added a per-account **Remove** action with a native warning confirmation,
+  pending state, safe failure feedback, and fresh Account/System
+  Check/Repository queries after completion.
+- Added Tauri's message-dialog permission required by native confirmations;
+  no additional filesystem, shell, credential, or clipboard-read permission
+  was granted.
+- The app now opens the exact allowlisted GitHub device URL itself as soon as a
+  one-time code arrives, instead of relying on GitHub CLI's failing Windows
+  browser handoff. Manual **Open GitHub again** remains available.
+- Kept the copy action permanently useful: after automatic copying succeeds,
+  the button becomes **Copy again** and can restore an overwritten clipboard
+  at any time while the code is valid.
+- Added a Windows regression test proving logout targets one exact host/login
+  pair without an interactive prompt.
+- Bumped the application and installer version to 0.1.4.
+- Built `target/release/bundle/nsis/Shehata Git_0.1.4_x64-setup.exe`
+  (5,350,985 bytes; SHA-256
+  `AFBB15DA633E2FB84BFE3CB06C67800AD2CBF61EE41858D972D3E64FEF382F51`).
+- Installed the 0.1.4 NSIS bundle over 0.1.3 and verified the uninstall
+  registration, `shehata 0.1.4`, a healthy installed Doctor report with all
+  eight checks ready, and that both existing GitHub CLI accounts remained
+  signed in across the upgrade.
+
+---
+
 ## 2026-08-01 — v0.1.3 verified one-time-code copying
 
 - Confirmed that GitHub's CLI browser authentication uses the OAuth device

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   CheckCircle2,
@@ -10,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   UserRound,
   XCircle,
 } from "lucide-react";
@@ -17,8 +19,8 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { addAccount, listAccounts } from "@/lib/tauri";
-import type { GhLoginEvent } from "@/lib/types";
+import { addAccount, listAccounts, removeAccount } from "@/lib/tauri";
+import type { GhAccount, GhLoginEvent } from "@/lib/types";
 
 /**
  * Accounts are discovered from the official GitHub CLI. Shehata Git never
@@ -36,12 +38,30 @@ export function AccountsPage() {
       void queryClient.invalidateQueries({ queryKey: ["doctor"] });
     },
   });
+  const remove = useMutation({
+    mutationFn: (account: GhAccount) => removeAccount(account),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["accounts"], data);
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["doctor"] }),
+        queryClient.invalidateQueries({ queryKey: ["repositories"] }),
+      ]);
+    },
+  });
 
   function startLogin() {
     login.reset();
     setLoginEvent(null);
     setDialogOpen(true);
     login.mutate();
+  }
+
+  async function confirmRemoveAccount(account: GhAccount) {
+    const approved = await confirmDialog(
+      `Remove @${account.login} from GitHub CLI on this PC? Repository assignments will stay locked to this identity and cannot push until you sign in again or assign another account. This does not revoke access on GitHub.com.`,
+      { title: "Remove GitHub account", kind: "warning" },
+    );
+    if (approved) remove.mutate(account);
   }
 
   return (
@@ -101,6 +121,18 @@ export function AccountsPage() {
         </Card>
       )}
 
+      {remove.isError && (
+        <Card className="border-destructive/40 bg-destructive/[0.04]">
+          <CardContent className="flex items-start gap-3 py-4">
+            <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
+            <div>
+              <p className="text-sm font-semibold text-destructive">Could not remove account</p>
+              <p className="mt-1 text-sm text-muted-foreground">{errorMessage(remove.error)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {accounts.data?.length === 0 && (
         <Card className="relative overflow-hidden border-dashed bg-card/45">
           <span className="absolute left-0 top-0 h-5 w-5 border-l border-t border-primary/50" />
@@ -130,28 +162,49 @@ export function AccountsPage() {
       )}
 
       <div className="grid gap-3">
-        {accounts.data?.map((account) => (
-          <Card key={`${account.host}:${account.login}`} className="border-l-2 border-l-success">
-            <CardContent className="flex flex-col items-start gap-4 py-4 sm:flex-row sm:items-center">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-border bg-background/35">
-                <UserRound className="h-5 w-5 text-muted-foreground" aria-hidden />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="data-label">AUTHENTICATED IDENTITY</p>
-                <p className="mt-1 truncate font-display font-semibold">@{account.login}</p>
-                <p className="mt-0.5 font-mono text-[0.7rem] text-muted-foreground">
-                  {account.host}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {account.active && <Badge variant="secondary">active in gh</Badge>}
-                <Badge variant={account.token_available ? "success" : "warning"}>
-                  {account.token_available ? "token ok" : "token unavailable"}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {accounts.data?.map((account) => {
+          const removing =
+            remove.isPending &&
+            remove.variables?.host === account.host &&
+            remove.variables.login === account.login;
+          return (
+            <Card key={`${account.host}:${account.login}`} className="border-l-2 border-l-success">
+              <CardContent className="flex flex-col items-start gap-4 py-4 sm:flex-row sm:items-center">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-border bg-background/35">
+                  <UserRound className="h-5 w-5 text-muted-foreground" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="data-label">AUTHENTICATED IDENTITY</p>
+                  <p className="mt-1 truncate font-display font-semibold">@{account.login}</p>
+                  <p className="mt-0.5 font-mono text-[0.7rem] text-muted-foreground">
+                    {account.host}
+                  </p>
+                </div>
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                  {account.active && <Badge variant="secondary">active in gh</Badge>}
+                  <Badge variant={account.token_available ? "success" : "warning"}>
+                    {account.token_available ? "token ok" : "token unavailable"}
+                  </Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto min-h-11 text-muted-foreground hover:text-destructive sm:ml-2 sm:min-h-9"
+                    onClick={() => confirmRemoveAccount(account)}
+                    disabled={remove.isPending || login.isPending}
+                  >
+                    {removing ? (
+                      <LoaderCircle className="animate-spin" aria-hidden />
+                    ) : (
+                      <Trash2 aria-hidden />
+                    )}
+                    {removing ? "Removing…" : "Remove"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {dialogOpen && (
@@ -178,6 +231,9 @@ interface AccountLoginDialogProps {
 function AccountLoginDialog({ event, pending, success, error, onClose }: AccountLoginDialogProps) {
   const code = event?.type === "code" ? event.code : null;
   const [browserError, setBrowserError] = useState<string | null>(null);
+  const [browserState, setBrowserState] = useState<"idle" | "opening" | "opened" | "failed">(
+    "idle",
+  );
   const [copyState, setCopyState] = useState<"idle" | "copying" | "copied" | "failed">("idle");
 
   useEffect(() => {
@@ -202,6 +258,32 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
     };
   }, [code]);
 
+  useEffect(() => {
+    let active = true;
+    if (!code) {
+      setBrowserState("idle");
+      setBrowserError(null);
+      return;
+    }
+
+    setBrowserState("opening");
+    setBrowserError(null);
+    void openUrl("https://github.com/login/device").then(
+      () => {
+        if (active) setBrowserState("opened");
+      },
+      (openError: unknown) => {
+        if (!active) return;
+        setBrowserState("failed");
+        setBrowserError(errorMessage(openError));
+      },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [code]);
+
   async function copyOneTimeCode() {
     if (!code) return;
     setCopyState("copying");
@@ -214,10 +296,13 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
   }
 
   async function reopenGitHub() {
+    setBrowserState("opening");
     setBrowserError(null);
     try {
       await openUrl("https://github.com/login/device");
+      setBrowserState("opened");
     } catch (openError) {
+      setBrowserState("failed");
       setBrowserError(errorMessage(openError));
     }
   }
@@ -260,7 +345,9 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                   {code
-                    ? "Paste the one-time code into GitHub and approve access, then return here. This security confirmation cannot be skipped."
+                    ? browserState === "failed"
+                      ? "The browser did not open automatically. Use Open GitHub below, paste the code, and approve access."
+                      : "GitHub is opening automatically. Paste the code and approve access, then return here."
                     : "GitHub CLI is creating a one-time code and opening your default browser."}
                 </p>
               </div>
@@ -292,12 +379,12 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
               </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <Button type="button" className="min-h-11" onClick={copyOneTimeCode}>
-                  {copyState === "copied" ? <CheckCircle2 aria-hidden /> : <Copy aria-hidden />}
-                  {copyState === "copied" ? "Copied" : "Copy code"}
+                  <Copy aria-hidden />
+                  {copyState === "copied" ? "Copy again" : "Copy code"}
                 </Button>
                 <Button type="button" variant="outline" className="min-h-11" onClick={reopenGitHub}>
                   <ExternalLink aria-hidden />
-                  Open GitHub
+                  {browserState === "opened" ? "Open GitHub again" : "Open GitHub"}
                 </Button>
               </div>
               {browserError && (

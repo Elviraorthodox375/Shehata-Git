@@ -77,6 +77,21 @@ async fn accounts_add(
 }
 
 #[tauri::command]
+async fn accounts_remove(
+    request: core_accounts::RemoveAccountRequest,
+) -> Result<Vec<shehata_core::AccountInfo>, String> {
+    let gh = GhRunner::locate()
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let accounts = core_accounts::remove_account(&gh, &request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    if let Ok(db) = open_db() {
+        core_accounts::mirror_accounts(&db, &accounts);
+    }
+    Ok(accounts)
+}
+
+#[tauri::command]
 async fn repositories_list() -> Result<Vec<core_repositories::RepositorySummary>, String> {
     core_repositories::list_repository_summaries_with_routing()
         .await
@@ -277,6 +292,7 @@ pub fn run() {
             prerequisites_install,
             accounts_list,
             accounts_add,
+            accounts_remove,
             repositories_list,
             repositories_add,
             repositories_assign,

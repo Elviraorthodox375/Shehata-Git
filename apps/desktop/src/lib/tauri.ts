@@ -35,6 +35,10 @@ export function addAccount(onEvent: (event: GhLoginEvent) => void): Promise<GhAc
   return invoke<GhAccount[]>("accounts_add", { onEvent: channel });
 }
 
+export function removeAccount(account: Pick<GhAccount, "host" | "login">): Promise<GhAccount[]> {
+  return invoke<GhAccount[]>("accounts_remove", { request: account });
+}
+
 export function listRepositories(): Promise<RepositorySummary[]> {
   return invoke<RepositorySummary[]>("repositories_list");
 }

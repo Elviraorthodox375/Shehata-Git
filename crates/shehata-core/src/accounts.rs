@@ -2,11 +2,18 @@
 //! metadata into the local database. Tokens are probed but never stored —
 //! `token_available` is the only signal that leaves this module.
 
+use serde::Deserialize;
 use shehata_github::GhRunner;
 use shehata_storage::{queries, Database};
 
 use crate::error::{Result, ShehataError};
 use crate::models::AccountInfo;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RemoveAccountRequest {
+    pub host: String,
+    pub login: String,
+}
 
 /// List all accounts known to the GitHub CLI, checking whether a token can
 /// actually be retrieved for each. This async discovery step never holds a
@@ -38,6 +45,19 @@ pub async fn list_accounts(gh: &GhRunner) -> Result<Vec<AccountInfo>> {
         }
     }
     Ok(accounts)
+}
+
+/// Sign one exact account out of the local GitHub CLI store, then return the
+/// fresh live account list. Repository assignments are deliberately retained
+/// so a removed credential can never silently fall through to another login.
+pub async fn remove_account(
+    gh: &GhRunner,
+    request: &RemoveAccountRequest,
+) -> Result<Vec<AccountInfo>> {
+    gh.logout(&request.host, &request.login)
+        .await
+        .map_err(ShehataError::Github)?;
+    list_accounts(gh).await
 }
 
 /// Mirror safe account metadata after discovery has completed. A database

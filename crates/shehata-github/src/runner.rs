@@ -134,6 +134,25 @@ impl GhRunner {
         serde_json::from_str(trimmed).map_err(|_| GhError::InvalidStatusJson)
     }
 
+    /// Remove one exact account from GitHub CLI's local authentication store.
+    /// This does not revoke the OAuth grant on github.com.
+    pub async fn logout(&self, host: &str, login: &str) -> Result<(), GhError> {
+        validate_host_and_login(host, login)?;
+        let (_stdout, code) = self
+            .run(
+                &["auth", "logout", "--hostname", host, "--user", login],
+                DEFAULT_TIMEOUT,
+            )
+            .await?;
+        if code != 0 {
+            return Err(GhError::Exit {
+                code,
+                message: format!("could not remove GitHub account '{login}' from this PC"),
+            });
+        }
+        Ok(())
+    }
+
     /// Start the official GitHub CLI browser login for github.com.
     ///
     /// The GitHub CLI remains the credential source of truth. This method
@@ -336,5 +355,22 @@ mod tests {
             code: "TEST-1234".to_string(),
         }));
         assert_eq!(events.len(), 3, "raw gh lines must never become events");
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn logout_targets_one_exact_account_without_a_prompt() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake_gh = dir.path().join("gh.cmd");
+        std::fs::write(
+            &fake_gh,
+            "@echo off\r\nif not \"%1\"==\"auth\" exit /b 2\r\nif not \"%2\"==\"logout\" exit /b 3\r\nif not \"%3\"==\"--hostname\" exit /b 4\r\nif not \"%4\"==\"github.com\" exit /b 5\r\nif not \"%5\"==\"--user\" exit /b 6\r\nif not \"%6\"==\"alice\" exit /b 7\r\nexit /b 0\r\n",
+        )
+        .unwrap();
+
+        GhRunner::with_path(fake_gh)
+            .logout("github.com", "alice")
+            .await
+            .unwrap();
     }
 }
