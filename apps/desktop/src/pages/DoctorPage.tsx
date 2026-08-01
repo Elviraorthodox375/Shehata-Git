@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -18,6 +19,7 @@ import {
   grantAccountScope,
   installPrerequisites,
   type PrerequisiteId,
+  packageManagerAvailable,
   runDoctor,
 } from "@/lib/tauri";
 import type { AccountScopeRepair, CheckStatus, GhLoginEvent, SystemCheck } from "@/lib/types";
@@ -136,6 +138,12 @@ export function DoctorPage() {
   const queryClient = useQueryClient();
   const [setupConfirmOpen, setSetupConfirmOpen] = useState(false);
   const doctor = useQuery({ queryKey: ["doctor"], queryFn: runDoctor });
+  // Automatic setup depends on Windows Package Manager, which is absent on
+  // older Windows 10 builds. Knowing up front avoids offering a dead button.
+  const packageManager = useQuery({
+    queryKey: ["package-manager"],
+    queryFn: packageManagerAvailable,
+  });
   const installable = (doctor.data?.checks ?? [])
     .filter((check) => check.status !== "ready" && INSTALLABLE_CHECKS[check.id])
     .map((check) => INSTALLABLE_CHECKS[check.id]);
@@ -229,23 +237,35 @@ export function DoctorPage() {
                   Let Shehata Git prepare this PC
                 </h2>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                  Downloads only the missing official Git tools through Microsoft WinGet, then
-                  checks the system again. Windows may ask for permission.
+                  {packageManager.data === false
+                    ? "Automatic setup needs Windows Package Manager, which is not on this PC. Install App Installer from the Microsoft Store, then re-check — or install Git and GitHub CLI yourself."
+                    : "Downloads only the missing official Git tools through Microsoft WinGet, then checks the system again. Windows may ask for permission."}
                 </p>
               </div>
             </div>
-            <Button
-              onClick={() => setSetupConfirmOpen(true)}
-              disabled={setup.isPending}
-              className="shrink-0"
-            >
-              {setup.isPending ? (
-                <Loader2 className="animate-spin" aria-hidden />
-              ) : (
-                <ShieldCheck aria-hidden />
-              )}
-              {setup.isPending ? "Installing…" : "Set up this PC"}
-            </Button>
+            {packageManager.data === false ? (
+              <Button
+                variant="outline"
+                onClick={() => void openUrl("https://aka.ms/getwinget")}
+                className="shrink-0"
+              >
+                <Download aria-hidden />
+                Get App Installer
+              </Button>
+            ) : (
+              <Button
+                onClick={() => setSetupConfirmOpen(true)}
+                disabled={setup.isPending || packageManager.isPending}
+                className="shrink-0"
+              >
+                {setup.isPending ? (
+                  <Loader2 className="animate-spin" aria-hidden />
+                ) : (
+                  <ShieldCheck aria-hidden />
+                )}
+                {setup.isPending ? "Installing…" : "Set up this PC"}
+              </Button>
+            )}
           </div>
           {setup.isError && (
             <p className="mt-4 rounded-[0.55rem] border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">

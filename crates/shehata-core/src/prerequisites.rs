@@ -54,6 +54,22 @@ pub struct InstallPrerequisitesResult {
     pub installed: Vec<InstalledPrerequisite>,
 }
 
+/// Whether automatic setup can run at all on this machine.
+///
+/// The desktop shows guidance instead of a dead button when Windows Package
+/// Manager is missing, which happens on older Windows 10 builds and on images
+/// where the App Installer package was removed.
+pub fn package_manager_available() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        which::which("winget").is_ok()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
 pub async fn install_prerequisites(
     request: InstallPrerequisitesRequest,
 ) -> Result<InstallPrerequisitesResult> {

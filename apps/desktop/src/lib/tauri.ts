@@ -33,6 +33,10 @@ export function installPrerequisites(ids: PrerequisiteId[]): Promise<InstallPrer
   return invoke<InstallPrerequisitesResult>("prerequisites_install", { request: { ids } });
 }
 
+export function packageManagerAvailable(): Promise<boolean> {
+  return invoke<boolean>("prerequisites_available");
+}
+
 export function listAccounts(): Promise<GhAccount[]> {
   return invoke<GhAccount[]>("accounts_list");
 }

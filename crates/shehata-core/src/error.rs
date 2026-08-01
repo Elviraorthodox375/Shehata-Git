@@ -49,7 +49,10 @@ pub enum ShehataError {
     #[error("could not update repository marker: {0}")]
     RepositoryMarker(String),
 
-    #[error("Windows Package Manager (winget) is unavailable")]
+    #[error(
+        "Windows Package Manager (winget) is unavailable. Install \"App Installer\" from the \
+         Microsoft Store, then run this check again."
+    )]
     PackageManagerMissing,
 
     #[error("automatic setup failed for {tool} (installer exit code {code})")]

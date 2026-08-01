@@ -4,6 +4,14 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.10 - 2026-08-01
+
+### Changed
+
+- Automatic setup now detects whether Windows Package Manager exists before
+  offering to install Git and GitHub CLI. When it is missing, the panel
+  explains why and links to App Installer instead of failing after the click.
+
 ## 0.1.9 - 2026-08-01
 
 ### Added

@@ -47,6 +47,11 @@ async fn prerequisites_install(
 }
 
 #[tauri::command]
+fn prerequisites_available() -> bool {
+    core_prerequisites::package_manager_available()
+}
+
+#[tauri::command]
 async fn accounts_list() -> Result<Vec<shehata_core::AccountInfo>, String> {
     let gh = GhRunner::locate()
         .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
@@ -395,6 +400,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             doctor_run,
             prerequisites_install,
+            prerequisites_available,
             accounts_list,
             accounts_add,
             accounts_cancel_login,
