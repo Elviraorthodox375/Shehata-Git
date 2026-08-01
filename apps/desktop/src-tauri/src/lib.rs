@@ -6,8 +6,8 @@
 
 use serde::Serialize;
 use shehata_core::{
-    accounts as core_accounts, assignment as core_assignment, repositories as core_repositories,
-    routing as core_routing, Doctor,
+    accounts as core_accounts, actions as core_actions, assignment as core_assignment,
+    repositories as core_repositories, routing as core_routing, Doctor,
 };
 use shehata_github::{GhLoginEvent, GhRunner};
 use shehata_storage::{queries, Database};
@@ -121,6 +121,42 @@ async fn repositories_unlink(
 }
 
 #[tauri::command]
+async fn repositories_status(
+    repository_id: String,
+) -> Result<core_actions::RepositoryActionStatus, String> {
+    core_actions::status(&repository_id)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_stage(
+    request: core_actions::PathsRequest,
+) -> Result<core_actions::GitActionResult, String> {
+    core_actions::stage(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_unstage(
+    request: core_actions::PathsRequest,
+) -> Result<core_actions::GitActionResult, String> {
+    core_actions::unstage(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_commit(
+    request: core_actions::CommitRequest,
+) -> Result<core_actions::GitActionResult, String> {
+    core_actions::commit(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
 fn audit_list() -> Result<Vec<shehata_storage::AuditEventRecord>, String> {
     let db = open_db()?;
     queries::list_audit_events(&db, 200)
@@ -174,6 +210,10 @@ pub fn run() {
             repositories_link,
             repositories_test,
             repositories_unlink,
+            repositories_status,
+            repositories_stage,
+            repositories_unstage,
+            repositories_commit,
             audit_list,
             mcp_info,
         ])

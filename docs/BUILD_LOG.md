@@ -5,6 +5,19 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 7 safe local Git actions foundation
+
+- Added shared status, selected-path stage/unstage, and normal commit services in Rust core.
+- Dynamic paths are bounded, must remain repository-relative, cannot target `.git`, and are always passed after Git's `--` option terminator without a shell.
+- Unstage works safely both with an existing HEAD (`git restore --staged`) and on an unborn branch (`git rm --cached`), without changing worktree files.
+- Commit rejects empty staged sets and unresolved conflicts, never exposes amend, and records safe success/failure audit events.
+- Added a real temporary-repository test covering status, first-commit stage/unstage, normal commit, and clean post-commit status.
+- Added a professional Changes dialog to repository rows with file-state selection, Stage selected, Unstage selected, and commit-message controls.
+- Pull `--ff-only`, push preflight, push policy enforcement, and network acceptance remain for the next Phase 7 increment.
+- Final repository gate passed: workspace formatting, clippy with warnings denied, all 55 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+
+---
+
 ## 2026-08-01 — Phase 6 credential routing vertical slice
 
 ### Repository-scoped credential routing

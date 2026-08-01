@@ -51,6 +51,34 @@ export function unlinkRepository(
   });
 }
 
+export function getRepositoryStatus(repositoryId: string): Promise<RepositoryActionStatus> {
+  return invoke<RepositoryActionStatus>("repositories_status", { repositoryId });
+}
+
+export function stageRepositoryPaths(
+  repositoryId: string,
+  paths: string[],
+): Promise<GitActionResult> {
+  return invoke<GitActionResult>("repositories_stage", {
+    request: { repository_id: repositoryId, paths },
+  });
+}
+
+export function unstageRepositoryPaths(
+  repositoryId: string,
+  paths: string[],
+): Promise<GitActionResult> {
+  return invoke<GitActionResult>("repositories_unstage", {
+    request: { repository_id: repositoryId, paths },
+  });
+}
+
+export function commitRepository(repositoryId: string, message: string): Promise<GitActionResult> {
+  return invoke<GitActionResult>("repositories_commit", {
+    request: { repository_id: repositoryId, message },
+  });
+}
+
 export function listAuditEvents(): Promise<AuditEvent[]> {
   return invoke<AuditEvent[]>("audit_list");
 }
@@ -96,4 +124,24 @@ export interface UnlinkResult {
   repository_id: string;
   restored_keys: string[];
   identity_preserved: boolean;
+}
+
+export interface ChangeEntry {
+  path: string;
+  index_status: string;
+  worktree_status: string;
+}
+
+export interface RepositoryActionStatus {
+  repository_id: string;
+  branch: string | null;
+  detached_head: boolean;
+  changes: ChangeEntry[];
+}
+
+export interface GitActionResult {
+  repository_id: string;
+  action: string;
+  changed_paths: number;
+  commit: string | null;
 }

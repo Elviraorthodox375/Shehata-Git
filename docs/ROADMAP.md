@@ -52,9 +52,12 @@
 - Real owner `ls-remote`, external push, and two-account acceptance remain pending authentication.
 - **First true product milestone.**
 
-## Phase 7 — Safe Git actions ⬜
+## Phase 7 — Safe Git actions 🚧
 
-- Stage/commit/pull `--ff-only`/push with preflight + audit events.
+- ✅ Status and selected-path stage/unstage.
+- ✅ Normal commit with conflict checks and audit events.
+- ✅ Desktop Changes workflow.
+- Pull `--ff-only`, push with preflight, and push policies remain.
 
 ## Phase 8 — CLI ⬜
 

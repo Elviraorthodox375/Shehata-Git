@@ -4,9 +4,11 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  FileDiff,
   FolderGit2,
   FolderOpen,
   GitBranch,
+  GitCommit,
   Globe,
   KeyRound,
   Loader2,
@@ -23,11 +25,16 @@ import { Button } from "@/components/ui/button";
 import {
   addRepository,
   assignRepository,
+  commitRepository,
+  getRepositoryStatus,
   linkRepository,
   listAccounts,
   listRepositories,
+  type RepositoryActionStatus,
+  stageRepositoryPaths,
   testRepositoryConnection,
   unlinkRepository,
+  unstageRepositoryPaths,
 } from "@/lib/tauri";
 import type { GhAccount, RepositorySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -35,6 +42,7 @@ import { cn } from "@/lib/utils";
 export function RepositoriesPage() {
   const queryClient = useQueryClient();
   const [selectedRepo, setSelectedRepo] = useState<RepositorySummary | null>(null);
+  const [changesRepo, setChangesRepo] = useState<RepositorySummary | null>(null);
   const [assignmentNotice, setAssignmentNotice] = useState<string | null>(null);
   const repos = useQuery({ queryKey: ["repositories"], queryFn: listRepositories });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
@@ -212,6 +220,7 @@ export function RepositoriesPage() {
             onLink={() => link.mutate(repo.id)}
             onTest={() => connectionTest.mutate(repo.id)}
             onUnlink={() => confirmUnlink(repo)}
+            onActions={() => setChangesRepo(repo)}
             pending={
               (link.isPending && link.variables === repo.id) ||
               (connectionTest.isPending && connectionTest.variables === repo.id) ||
@@ -239,6 +248,8 @@ export function RepositoriesPage() {
           }
         />
       )}
+
+      {changesRepo && <GitActionsDialog repo={changesRepo} onClose={() => setChangesRepo(null)} />}
     </div>
   );
 }
@@ -275,6 +286,7 @@ function RepositoryRow({
   onLink,
   onTest,
   onUnlink,
+  onActions,
   pending,
 }: {
   repo: RepositorySummary;
@@ -283,6 +295,7 @@ function RepositoryRow({
   onLink: () => void;
   onTest: () => void;
   onUnlink: () => void;
+  onActions: () => void;
   pending: boolean;
 }) {
   return (
@@ -353,6 +366,11 @@ function RepositoryRow({
             </div>
           )}
           <div className="flex flex-wrap justify-end gap-2">
+            {repo.assigned_login && (
+              <Button size="sm" variant="outline" onClick={onActions} disabled={pending}>
+                <FileDiff aria-hidden /> Changes
+              </Button>
+            )}
             {repo.assigned_login &&
               repo.remote_protocol === "https" &&
               (!repo.routing_configured ? (
@@ -394,6 +412,187 @@ function RepositoryRow({
       </div>
     </article>
   );
+}
+
+function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [message, setMessage] = useState("");
+  const status = useQuery({
+    queryKey: ["repository-status", repo.id],
+    queryFn: () => getRepositoryStatus(repo.id),
+  });
+  const refresh = async () => {
+    setSelected(new Set());
+    await queryClient.invalidateQueries({ queryKey: ["repository-status", repo.id] });
+  };
+  const stage = useMutation({
+    mutationFn: (paths: string[]) => stageRepositoryPaths(repo.id, paths),
+    onSuccess: refresh,
+  });
+  const unstage = useMutation({
+    mutationFn: (paths: string[]) => unstageRepositoryPaths(repo.id, paths),
+    onSuccess: refresh,
+  });
+  const commit = useMutation({
+    mutationFn: () => commitRepository(repo.id, message),
+    onSuccess: async () => {
+      setMessage("");
+      await refresh();
+    },
+  });
+  const pending = stage.isPending || unstage.isPending || commit.isPending;
+  const error = stage.error ?? unstage.error ?? commit.error ?? status.error;
+  const selectedPaths = [...selected];
+  const stagedCount = status.data?.changes.filter(isStaged).length ?? 0;
+
+  function toggle(path: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4 backdrop-blur-sm">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="changes-title"
+        className="instrument-panel flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[0.8rem]"
+      >
+        <header className="flex items-start justify-between gap-5 border-b border-border p-5 sm:p-6">
+          <div className="flex gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center border border-primary/30 bg-primary/[0.08]">
+              <FileDiff className="h-5 w-5 text-primary" aria-hidden />
+            </div>
+            <div>
+              <p className="eyebrow">Phase 7 / safe Git actions</p>
+              <h2 id="changes-title" className="mt-1 font-display text-xl font-semibold">
+                Changes in {repo.display_name}
+              </h2>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                {status.data?.detached_head
+                  ? "DETACHED HEAD"
+                  : (status.data?.branch ?? "No branch")}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center border border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+            onClick={onClose}
+            disabled={pending}
+            aria-label="Close changes"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+          {status.isLoading && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Reading changes…
+            </p>
+          )}
+          {status.data?.changes.length === 0 && (
+            <div className="border border-success/25 bg-success/[0.05] p-5 text-sm text-success">
+              Working tree is clean.
+            </div>
+          )}
+          <div className="space-y-2">
+            {status.data?.changes.map((change) => (
+              <label
+                key={`${change.index_status}${change.worktree_status}:${change.path}`}
+                className="flex cursor-pointer items-center gap-3 border border-border bg-background/25 p-3 hover:border-muted-foreground/40"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(change.path)}
+                  onChange={() => toggle(change.path)}
+                  className="h-4 w-4 accent-primary"
+                />
+                <span
+                  className={cn(
+                    "w-16 shrink-0 font-mono text-[0.65rem] font-semibold",
+                    isStaged(change) ? "text-success" : "text-warning",
+                  )}
+                >
+                  {isStaged(change) ? "STAGED" : "CHANGED"}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs">{change.path}</span>
+                <span className="font-mono text-[0.65rem] text-muted-foreground">
+                  {change.index_status}
+                  {change.worktree_status}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {error && (
+            <div className="mt-4 flex gap-3 border border-destructive/30 bg-destructive/[0.06] p-3">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+              <p className="text-sm text-destructive">{errorMessage(error)}</p>
+            </div>
+          )}
+
+          <div className="mt-6 border-t border-border pt-5">
+            <label className="space-y-2 text-sm font-medium">
+              <span>Commit message</span>
+              <textarea
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                maxLength={1000}
+                rows={3}
+                placeholder="feat: describe the change"
+                className="w-full resize-none rounded-[0.5rem] border border-input bg-background/45 p-3 text-sm outline-none placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/15"
+              />
+            </label>
+          </div>
+        </div>
+
+        <footer className="flex flex-col gap-3 border-t border-border bg-background/20 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pending || selectedPaths.length === 0}
+              onClick={() => stage.mutate(selectedPaths)}
+            >
+              Stage selected
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={pending || selectedPaths.length === 0}
+              onClick={() => unstage.mutate(selectedPaths)}
+            >
+              Unstage selected
+            </Button>
+          </div>
+          <Button
+            disabled={pending || stagedCount === 0 || message.trim().length === 0}
+            onClick={() => commit.mutate()}
+          >
+            {commit.isPending ? (
+              <Loader2 className="animate-spin" aria-hidden />
+            ) : (
+              <GitCommit aria-hidden />
+            )}
+            {commit.isPending
+              ? "Committing…"
+              : `Commit ${stagedCount} change${stagedCount === 1 ? "" : "s"}`}
+          </Button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function isStaged(change: RepositoryActionStatus["changes"][number]): boolean {
+  return change.index_status !== " " && change.index_status !== "?";
 }
 
 function AssignmentDialog({
