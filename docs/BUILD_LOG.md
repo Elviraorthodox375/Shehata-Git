@@ -5,6 +5,37 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 10 Windows installer vertical slice
+
+- Added a reproducible sidecar preparation step that release-builds the CLI,
+  credential helper, and MCP server, names them with the native Rust target
+  triple, and places them where Tauri verifies them for bundling.
+- Configured the NSIS bundle to ship `shehata-git.exe`, `shehata.exe`,
+  `git-credential-shehata.exe`, and `shehata-mcp.exe` together.
+- Added installer-only current-user PATH maintenance through the native CLI.
+  It preserves the existing registry value type and contents, rejects invalid
+  paths, avoids duplicates case-insensitively, and broadcasts the Windows
+  environment-change notification.
+- Added NSIS post-install and pre-uninstall hooks so terminals and Git can find
+  the packaged commands without administrator privileges.
+- Added unit coverage for idempotent PATH insertion and exact removal while
+  preserving unrelated entries.
+- Built the real unsigned Windows x64 NSIS installer at
+  `target/release/bundle/nsis/Shehata Git_0.1.0_x64-setup.exe`.
+- Inspected the generated NSIS script and confirmed that all three external
+  binaries are copied on install and removed on uninstall.
+- Ran a real silent smoke test into a workspace-bounded temporary directory:
+  all four executables and the uninstaller were present, the installed CLI
+  reported `shehata 0.1.0`, the directory appeared in user PATH, uninstall
+  removed it, the exact original PATH was restored, and the install directory
+  was removed.
+- The installer is intentionally unsigned. Code signing, hosted draft-release
+  execution, accessibility review, and owner two-account acceptance remain.
+- Final repository gate passed: workspace formatting, clippy with warnings
+  denied, all 69 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+
+---
+
 ## 2026-08-01 — Phase 9 safe native MCP surface
 
 - Replaced every MCP milestone placeholder with shared-core implementations for status, diff counts, identity, connection test, explicit-path commit, pull `--ff-only`, and normal push.

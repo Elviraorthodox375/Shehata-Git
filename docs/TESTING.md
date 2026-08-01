@@ -51,6 +51,17 @@ Safety:
 ## Verifying a release build
 
 ```bash
-pnpm --filter @shehata/desktop tauri build
-# Installer: apps/desktop/src-tauri/target/release/bundle/nsis/
+pnpm build
+# Installer: target/release/bundle/nsis/Shehata Git_<version>_x64-setup.exe
 ```
+
+The Windows smoke test must verify all of the following with a temporary install:
+
+- `shehata-git.exe`, `shehata.exe`, `git-credential-shehata.exe`, and
+  `shehata-mcp.exe` are installed beside one another.
+- `shehata --version` runs from the installed copy.
+- The install directory is added exactly once to the current-user PATH.
+- Silent uninstall succeeds, removes the install directory, and restores the
+  exact original current-user PATH value.
+- The unsigned development installer is never published as a stable release;
+  a human must review the draft and the expected SmartScreen warning first.

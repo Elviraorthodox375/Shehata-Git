@@ -64,6 +64,17 @@ enum Commands {
     },
     /// Start the native Shehata MCP server on stdio.
     Mcp,
+    /// Installer-only user PATH maintenance.
+    #[command(hide = true, subcommand)]
+    Path(PathCommands),
+}
+
+#[derive(Subcommand)]
+enum PathCommands {
+    /// Add the installation directory to the current user's PATH.
+    Install { directory: PathBuf },
+    /// Remove the installation directory from the current user's PATH.
+    Uninstall { directory: PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -126,6 +137,12 @@ async fn main() -> ExitCode {
         Commands::Test { path } => cmd_test(cli.json, path.as_deref()).await,
         Commands::Push { path, yes } => cmd_push(cli.json, path.as_deref(), yes).await,
         Commands::Mcp => cmd_mcp(cli.json).await,
+        Commands::Path(PathCommands::Install { directory }) => {
+            cmd_user_path(cli.json, &directory, true)
+        }
+        Commands::Path(PathCommands::Uninstall { directory }) => {
+            cmd_user_path(cli.json, &directory, false)
+        }
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -468,6 +485,153 @@ fn locate_mcp_binary() -> Option<PathBuf> {
     which::which("shehata-mcp").ok()
 }
 
+fn cmd_user_path(json: bool, directory: &std::path::Path, install: bool) -> Result<(), u8> {
+    #[cfg(windows)]
+    {
+        update_windows_user_path(directory, install)
+            .map_err(|error| fail_message(json, "path_update_error", &error))?;
+        if json {
+            print_json(&serde_json::json!({
+                "updated": true,
+                "operation": if install { "install" } else { "uninstall" },
+                "directory": directory,
+            }))
+        } else {
+            println!(
+                "User PATH {} for {}.",
+                if install { "updated" } else { "cleaned" },
+                safe_text(&directory.display().to_string())
+            );
+            Ok(())
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (directory, install);
+        Err(fail_message_text(
+            json,
+            "unsupported_platform",
+            "installer PATH maintenance is only supported on Windows",
+        ))
+    }
+}
+
+#[cfg(windows)]
+fn update_windows_user_path(directory: &std::path::Path, install: bool) -> std::io::Result<()> {
+    use std::io::{Error, ErrorKind};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SendMessageTimeoutW, HWND_BROADCAST, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE,
+    };
+    use winreg::enums::{HKEY_CURRENT_USER, REG_EXPAND_SZ, REG_SZ};
+    use winreg::types::{FromRegValue, ToRegValue};
+    use winreg::RegKey;
+
+    if !directory.is_absolute() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "installation directory must be absolute",
+        ));
+    }
+    let directory = directory.as_os_str().to_string_lossy();
+    if directory.contains(';') || directory.contains('\0') {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "installation directory contains an invalid PATH character",
+        ));
+    }
+
+    let environment = RegKey::predef(HKEY_CURRENT_USER)
+        .create_subkey("Environment")?
+        .0;
+    let existing = match environment.get_raw_value("Path") {
+        Ok(value) => Some(value),
+        Err(error) if error.kind() == ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let current = match &existing {
+        Some(value) if matches!(value.vtype, REG_SZ | REG_EXPAND_SZ) => {
+            String::from_reg_value(value)?
+        }
+        Some(_) => {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "the current user PATH has an unsupported registry type",
+            ));
+        }
+        None => String::new(),
+    };
+
+    let (updated, changed) = if install {
+        add_path_entry(&current, &directory)
+    } else {
+        remove_path_entry(&current, &directory)
+    };
+    if !changed {
+        return Ok(());
+    }
+
+    let mut value = updated.to_reg_value();
+    value.vtype = existing.map_or(REG_EXPAND_SZ, |existing| existing.vtype);
+    environment.set_raw_value("Path", &value)?;
+
+    let environment_wide: Vec<u16> = "Environment\0".encode_utf16().collect();
+    let mut ignored = 0usize;
+    // SAFETY: all values are fixed Win32 constants and `environment_wide` is a
+    // live, NUL-terminated UTF-16 buffer for the duration of this synchronous call.
+    unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            environment_wide.as_ptr() as isize,
+            SMTO_ABORTIFHUNG,
+            5_000,
+            &mut ignored,
+        );
+    }
+    Ok(())
+}
+
+fn add_path_entry(current: &str, directory: &str) -> (String, bool) {
+    if current
+        .split(';')
+        .any(|entry| normalized_path_entry(entry) == normalized_path_entry(directory))
+    {
+        return (current.to_string(), false);
+    }
+    if current.is_empty() {
+        (directory.to_string(), true)
+    } else if current.ends_with(';') {
+        (format!("{current}{directory}"), true)
+    } else {
+        (format!("{current};{directory}"), true)
+    }
+}
+
+fn remove_path_entry(current: &str, directory: &str) -> (String, bool) {
+    let expected = normalized_path_entry(directory);
+    let entries: Vec<&str> = current.split(';').collect();
+    let retained: Vec<&str> = entries
+        .iter()
+        .copied()
+        .filter(|entry| normalized_path_entry(entry) != expected)
+        .collect();
+    if retained.len() == entries.len() {
+        (current.to_string(), false)
+    } else {
+        (retained.join(";"), true)
+    }
+}
+
+fn normalized_path_entry(entry: &str) -> String {
+    entry
+        .trim()
+        .trim_matches('"')
+        .replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_lowercase()
+}
+
 fn print_json<T: Serialize>(value: &T) -> Result<(), u8> {
     let text = serde_json::to_string_pretty(value).map_err(|_| EXIT_FAILURE)?;
     println!("{text}");
@@ -544,5 +708,31 @@ mod tests {
     #[test]
     fn terminal_text_escapes_control_characters() {
         assert_eq!(safe_text("ok\u{1b}[31m"), "ok\\u{1b}[31m");
+    }
+
+    #[test]
+    fn path_entry_update_is_idempotent_and_case_insensitive() {
+        let (added, changed) = add_path_entry(
+            r"C:\Windows;C:\Tools",
+            r"C:\Users\Me\AppData\Local\Shehata Git",
+        );
+        assert!(changed);
+        assert_eq!(
+            added,
+            r"C:\Windows;C:\Tools;C:\Users\Me\AppData\Local\Shehata Git"
+        );
+        let (same, changed) = add_path_entry(&added, r"c:/users/me/appdata/local/shehata git\");
+        assert!(!changed);
+        assert_eq!(same, added);
+    }
+
+    #[test]
+    fn path_entry_removal_preserves_unrelated_entries() {
+        let (updated, changed) = remove_path_entry(
+            r"C:\Windows;C:\Shehata Git;C:\Tools;C:\SHEHATA GIT\",
+            r"c:/shehata git",
+        );
+        assert!(changed);
+        assert_eq!(updated, r"C:\Windows;C:\Tools");
     }
 }

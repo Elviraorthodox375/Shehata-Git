@@ -77,10 +77,14 @@
 - ✅ Exact command/config UI and bounded AGENTS.md generation.
 - External MCP Inspector/client acceptance remains for packaged binaries.
 
-## Phase 10 — Quality & release ⬜
+## Phase 10 — Quality & release 🚧
 
-- Test matrix complete, accessibility pass, CI green, NSIS installer,
-  draft release, two-account manual acceptance checklist.
+- ✅ Reproducible native sidecar build for the CLI, credential helper, and MCP server.
+- ✅ NSIS installer bundles the desktop app and all three command-line binaries.
+- ✅ Current-user PATH integration is added on install and removed on uninstall.
+- ✅ Real silent install/run/uninstall smoke test passed on Windows x64.
+- Test matrix completion, accessibility pass, hosted CI/draft release, code signing,
+  and two-account manual acceptance remain.
 
 ## Explicitly out of scope for v0.1
 

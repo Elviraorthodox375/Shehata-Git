@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "pnpm build && node ../../scripts/prepare-sidecars.mjs"
   },
   "app": {
     "windows": [
@@ -29,6 +29,11 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "externalBin": [
+      "binaries/shehata",
+      "binaries/git-credential-shehata",
+      "binaries/shehata-mcp"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -40,7 +45,8 @@
       "nsis": {
         "installMode": "currentUser",
         "displayLanguageSelector": false,
-        "languages": ["English"]
+        "languages": ["English"],
+        "installerHooks": "./windows/hooks.nsh"
       }
     }
   }

@@ -24,5 +24,9 @@ which = "8"
 
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
+winreg = "0.55"
+
 [dev-dependencies]
 tempfile.workspace = true
