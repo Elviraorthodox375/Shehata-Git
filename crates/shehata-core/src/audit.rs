@@ -39,6 +39,7 @@ mod tests {
                     repository_id: None,
                     account_login: None,
                     summary,
+                    detail: None,
                     result: "success",
                     exit_code: Some(0),
                     duration_ms: None,

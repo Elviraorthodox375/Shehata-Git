@@ -347,6 +347,7 @@ fn set_push_policy_at(db_path: &Path, request: SetPushPolicyRequest) -> Result<P
             repository_id: Some(&repository.id),
             account_login: None,
             summary: "Updated repository push policy",
+            detail: None,
             result: "success",
             exit_code: Some(0),
             duration_ms: None,
@@ -541,6 +542,7 @@ async fn push_at(
                     None,
                     "push_preflight",
                     "Push preflight blocked the operation",
+                    None,
                     "blocked",
                     None,
                     started,
@@ -556,6 +558,7 @@ async fn push_at(
         Some(&plan.account.login),
         "push_preflight",
         "Push preflight passed",
+        None,
         "success",
         Some(0),
         started,
@@ -767,14 +770,13 @@ async fn finish_network_action(
                 .stdout
                 .trim()
                 .to_string();
-            let summary = network_action_summary(
+            let subject = subject_of_head(Path::new(&plan.repository.canonical_path)).await;
+            let (summary, detail) = network_action_lines(
                 action,
                 &plan.repository.display_name,
                 &plan.branch,
                 &head_commit,
-                subject_of_head(Path::new(&plan.repository.canonical_path))
-                    .await
-                    .as_deref(),
+                subject.as_deref(),
             );
             write_network_audit(
                 db_path,
@@ -782,6 +784,7 @@ async fn finish_network_action(
                 Some(&plan.account.login),
                 action,
                 &summary,
+                Some(detail.as_str()),
                 "success",
                 Some(0),
                 started,
@@ -804,6 +807,7 @@ async fn finish_network_action(
                 Some(&plan.account.login),
                 action,
                 "Network Git action failed",
+                None,
                 "failure",
                 git_error_code(&error),
                 started,
@@ -948,30 +952,31 @@ async fn subject_of_head(repo_path: &Path) -> Option<String> {
     })
 }
 
-/// Build the human line shown in the activity trail.
+/// Split an activity entry into a title and a detail line.
 ///
-/// It keeps naming the push "normal" — the app never force pushes, and the
-/// trail is where that guarantee has to stay visible — then adds what the
-/// action actually touched.
-fn network_action_summary(
+/// The title is what the action actually did — the commit subject — so the
+/// trail reads like a list of changes rather than a list of identical
+/// sentences. The detail line carries the safety label and the context:
+/// pushes stay named "Normal push" because this trail is where the
+/// never-force-push guarantee has to remain visible.
+fn network_action_lines(
     action: &str,
     repository: &str,
     branch: &str,
     head_commit: &str,
     subject: Option<&str>,
-) -> String {
-    let verb = if action == "push" {
+) -> (String, String) {
+    let label = if action == "push" {
         "Normal push"
     } else {
         "Fast-forward pull"
     };
     let short_commit = head_commit.chars().take(7).collect::<String>();
-    let mut summary = format!("{verb} · {repository} ({branch}) · {short_commit}");
-    if let Some(subject) = subject {
-        summary.push_str(" · ");
-        summary.push_str(subject);
-    }
-    summary
+    let title = subject
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{label} completed"));
+    let detail = format!("{label} · {repository} · {branch} · {short_commit}");
+    (title, detail)
 }
 
 async fn execute_pull(
@@ -1237,6 +1242,7 @@ fn write_audit(
             repository_id: Some(repository_id),
             account_login: None,
             summary,
+            detail: None,
             result,
             exit_code,
             duration_ms: Some(started.elapsed().as_millis().min(i64::MAX as u128) as i64),
@@ -1252,6 +1258,7 @@ fn write_network_audit(
     account_login: Option<&str>,
     event_type: &str,
     summary: &str,
+    detail: Option<&str>,
     result: &str,
     exit_code: Option<i64>,
     started: Instant,
@@ -1264,6 +1271,7 @@ fn write_network_audit(
             repository_id: Some(repository_id),
             account_login,
             summary,
+            detail,
             result,
             exit_code,
             duration_ms: Some(started.elapsed().as_millis().min(i64::MAX as u128) as i64),
@@ -1515,23 +1523,23 @@ mod tests {
     }
 
     #[test]
-    fn network_summary_names_the_action_and_what_it_touched() {
-        let push = network_action_summary(
+    fn network_lines_title_the_change_and_detail_the_context() {
+        let (title, detail) = network_action_lines(
             "push",
             "Shehata Git",
             "main",
             "0545b97a1c2d3e4f",
             Some("docs: mark shipped roadmap items"),
         );
-        assert_eq!(
-            push,
-            "Normal push · Shehata Git (main) · 0545b97 · docs: mark shipped roadmap items"
-        );
+        assert_eq!(title, "docs: mark shipped roadmap items");
         // The force-push guarantee has to stay visible in the trail.
-        assert!(push.starts_with("Normal push"));
+        assert_eq!(detail, "Normal push · Shehata Git · main · 0545b97");
 
-        let pull = network_action_summary("pull_ff_only", "site", "master", "abcdef1234", None);
-        assert_eq!(pull, "Fast-forward pull · site (master) · abcdef1");
+        // A repository with no readable subject still names the action.
+        let (title, detail) =
+            network_action_lines("pull_ff_only", "site", "master", "abcdef1234", None);
+        assert_eq!(title, "Fast-forward pull completed");
+        assert_eq!(detail, "Fast-forward pull · site · master · abcdef1");
     }
 
     #[test]

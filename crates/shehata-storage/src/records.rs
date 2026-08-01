@@ -63,6 +63,8 @@ pub struct AuditEventRecord {
     pub account_login: Option<String>,
     /// Safe human summary — never contains secrets or file contents.
     pub summary: String,
+    /// Repository, branch, and commit context. Same safety rules as `summary`.
+    pub detail: Option<String>,
     /// "success" | "failure" | "blocked"
     pub result: String,
     pub exit_code: Option<i64>,
@@ -78,6 +80,7 @@ pub struct NewAuditEvent<'a> {
     pub repository_id: Option<&'a str>,
     pub account_login: Option<&'a str>,
     pub summary: &'a str,
+    pub detail: Option<&'a str>,
     pub result: &'a str,
     pub exit_code: Option<i64>,
     pub duration_ms: Option<i64>,

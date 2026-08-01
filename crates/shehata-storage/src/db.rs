@@ -19,9 +19,10 @@ pub enum StorageError {
 
 /// Embedded migrations, applied in order. Never edit an applied migration —
 /// add a new one.
-const MIGRATIONS: &[(i64, &str)] = &[(
-    1,
-    r#"
+const MIGRATIONS: &[(i64, &str)] = &[
+    (
+        1,
+        r#"
         CREATE TABLE accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             host TEXT NOT NULL,
@@ -86,7 +87,16 @@ const MIGRATIONS: &[(i64, &str)] = &[(
         CREATE INDEX idx_audit_events_timestamp ON audit_events (timestamp DESC);
         CREATE INDEX idx_backups_repo ON repository_config_backups (repository_id);
         "#,
-)];
+    ),
+    (
+        2,
+        r#"
+        -- Technical context for an activity entry, kept apart from its human
+        -- title so the trail can be read at a glance.
+        ALTER TABLE audit_events ADD COLUMN detail TEXT;
+        "#,
+    ),
+];
 
 pub struct Database {
     conn: Connection,

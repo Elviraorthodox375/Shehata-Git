@@ -60,6 +60,7 @@ export function ActivityPage() {
       const matchesSearch =
         !needle ||
         event.summary.toLowerCase().includes(needle) ||
+        event.detail?.toLowerCase().includes(needle) ||
         event.event_type.toLowerCase().includes(needle) ||
         event.account_login?.toLowerCase().includes(needle);
       return matchesResult && matchesSearch;
@@ -181,9 +182,14 @@ export function ActivityPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-sm font-semibold">{event.summary}</p>
+                    <p className="text-sm font-semibold leading-6">{event.summary}</p>
                     <Badge variant={succeeded ? "success" : "destructive"}>{event.result}</Badge>
                   </div>
+                  {event.detail && (
+                    <p className="mt-1.5 truncate text-xs leading-5 text-muted-foreground/90">
+                      {event.detail}
+                    </p>
+                  )}
                   <p className="mt-2 font-mono text-[0.68rem] uppercase tracking-[0.08em] text-muted-foreground">
                     {event.event_type.replaceAll("_", " ")}
                     {event.account_login ? ` · @${event.account_login}` : ""}

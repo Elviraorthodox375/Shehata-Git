@@ -383,14 +383,15 @@ pub fn insert_audit_event(
 ) -> Result<(), StorageError> {
     db.connection().execute(
         "INSERT INTO audit_events
-            (timestamp, repository_id, event_type, account_login, summary, result, exit_code, duration_ms)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            (timestamp, repository_id, event_type, account_login, summary, detail, result, exit_code, duration_ms)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             now(),
             event.repository_id,
             event.event_type,
             event.account_login,
             event.summary,
+            event.detail,
             event.result,
             event.exit_code,
             event.duration_ms
@@ -401,7 +402,7 @@ pub fn insert_audit_event(
 
 pub fn list_audit_events(db: &Database, limit: i64) -> Result<Vec<AuditEventRecord>, StorageError> {
     let mut stmt = db.connection().prepare(
-        "SELECT id, timestamp, repository_id, event_type, account_login, summary, result, exit_code, duration_ms
+        "SELECT id, timestamp, repository_id, event_type, account_login, summary, detail, result, exit_code, duration_ms
          FROM audit_events ORDER BY timestamp DESC, id DESC LIMIT ?1",
     )?;
     let rows = stmt
@@ -413,9 +414,10 @@ pub fn list_audit_events(db: &Database, limit: i64) -> Result<Vec<AuditEventReco
                 event_type: row.get(3)?,
                 account_login: row.get(4)?,
                 summary: row.get(5)?,
-                result: row.get(6)?,
-                exit_code: row.get(7)?,
-                duration_ms: row.get(8)?,
+                detail: row.get(6)?,
+                result: row.get(7)?,
+                exit_code: row.get(8)?,
+                duration_ms: row.get(9)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -569,6 +571,7 @@ mod tests {
                 repository_id: Some("repo-1"),
                 account_login: Some("octocat"),
                 summary: "Tested connection for example",
+                detail: None,
                 result: "success",
                 exit_code: Some(0),
                 duration_ms: Some(812),
@@ -596,6 +599,7 @@ mod tests {
                     repository_id: None,
                     account_login: None,
                     summary,
+                    detail: None,
                     result: "success",
                     exit_code: Some(0),
                     duration_ms: None,

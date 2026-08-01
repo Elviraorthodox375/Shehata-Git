@@ -82,6 +82,7 @@ fn generate_agents_at(
             repository_id: Some(&repository.id),
             account_login: None,
             summary: "Generated the bounded Shehata Git AGENTS.md section",
+            detail: None,
             result: "success",
             exit_code: Some(0),
             duration_ms: None,

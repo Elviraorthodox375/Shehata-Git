@@ -68,6 +68,8 @@ export interface AuditEvent {
   event_type: string;
   account_login: string | null;
   summary: string;
+  /** Repository, branch, and commit context for this entry. */
+  detail: string | null;
   result: string;
   exit_code: number | null;
 }
