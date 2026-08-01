@@ -5,6 +5,33 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — v0.1.3 verified one-time-code copying
+
+- Confirmed that GitHub's CLI browser authentication uses the OAuth device
+  flow: GitHub requires the user to enter a short-lived `user_code` and approve
+  access in the browser. This security confirmation cannot be automated away
+  by the desktop app.
+- Removed reliance on GitHub CLI's `--clipboard` side effect after the live UI
+  claimed the code was copied when the Windows clipboard had not changed.
+- Added Tauri's official clipboard manager and granted only
+  `clipboard-manager:allow-write-text`; the app has no clipboard-read
+  permission.
+- The account dialog now copies a received code itself, reports success only
+  after the clipboard write resolves, exposes a prominent manual **Copy code**
+  action, and gives an honest fallback message if automatic copying fails.
+- Clarified the browser instructions: paste the one-time code, approve access,
+  and return while GitHub CLI completes its polling. The official GitHub page
+  remains available as a separate fallback action.
+- Bumped the application and installer version to 0.1.3.
+- Built `target/release/bundle/nsis/Shehata Git_0.1.3_x64-setup.exe`
+  (5,343,303 bytes; SHA-256
+  `EDF0024EF0C8AB356309CC8465E513ADE633330250DF9331B673CADCCC6225BC`).
+- Installed the 0.1.3 NSIS bundle over 0.1.2 and verified the uninstall
+  registration, `shehata 0.1.3`, and a healthy installed Doctor report with
+  all eight checks ready.
+
+---
+
 ## 2026-08-01 — v0.1.2 silent background commands and sign-in UX repair
 
 - Diagnosed the GitHub account flow from the live failure state: GitHub CLI

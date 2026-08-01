@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   CheckCircle2,
+  Copy,
   ExternalLink,
   KeyRound,
   LoaderCircle,
@@ -11,7 +13,7 @@ import {
   UserRound,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -176,6 +178,40 @@ interface AccountLoginDialogProps {
 function AccountLoginDialog({ event, pending, success, error, onClose }: AccountLoginDialogProps) {
   const code = event?.type === "code" ? event.code : null;
   const [browserError, setBrowserError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copying" | "copied" | "failed">("idle");
+
+  useEffect(() => {
+    let active = true;
+    if (!code) {
+      setCopyState("idle");
+      return;
+    }
+
+    setCopyState("copying");
+    void writeText(code, { label: "GitHub one-time sign-in code" }).then(
+      () => {
+        if (active) setCopyState("copied");
+      },
+      () => {
+        if (active) setCopyState("failed");
+      },
+    );
+
+    return () => {
+      active = false;
+    };
+  }, [code]);
+
+  async function copyOneTimeCode() {
+    if (!code) return;
+    setCopyState("copying");
+    try {
+      await writeText(code, { label: "GitHub one-time sign-in code" });
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  }
 
   async function reopenGitHub() {
     setBrowserError(null);
@@ -224,7 +260,7 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                   {code
-                    ? "Finish the GitHub page, then return here. Keep this window open while GitHub CLI verifies your account."
+                    ? "Paste the one-time code into GitHub and approve access, then return here. This security confirmation cannot be skipped."
                     : "GitHub CLI is creating a one-time code and opening your default browser."}
                 </p>
               </div>
@@ -240,18 +276,30 @@ function AccountLoginDialog({ event, pending, success, error, onClose }: Account
               <p className="mt-2 font-mono text-2xl font-semibold tracking-[0.18em] text-foreground">
                 {code}
               </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                The GitHub CLI also copied this code to your clipboard.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-4 min-h-11 w-full"
-                onClick={reopenGitHub}
+              <p
+                className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+                aria-live="polite"
               >
-                <ExternalLink aria-hidden />
-                Open GitHub sign-in
-              </Button>
+                {copyState === "copied" && (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden />
+                    Copied — paste it into the GitHub page.
+                  </>
+                )}
+                {copyState === "copying" && "Copying the code…"}
+                {copyState === "failed" && "Automatic copy failed. Use Copy code below."}
+                {copyState === "idle" && "Copy this code into the GitHub page."}
+              </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <Button type="button" className="min-h-11" onClick={copyOneTimeCode}>
+                  {copyState === "copied" ? <CheckCircle2 aria-hidden /> : <Copy aria-hidden />}
+                  {copyState === "copied" ? "Copied" : "Copy code"}
+                </Button>
+                <Button type="button" variant="outline" className="min-h-11" onClick={reopenGitHub}>
+                  <ExternalLink aria-hidden />
+                  Open GitHub
+                </Button>
+              </div>
               {browserError && (
                 <p className="mt-2 text-xs leading-relaxed text-destructive">
                   Could not open the browser: {browserError}

@@ -156,7 +156,6 @@ impl GhRunner {
                 "--git-protocol",
                 "https",
                 "--web",
-                "--clipboard",
             ])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())

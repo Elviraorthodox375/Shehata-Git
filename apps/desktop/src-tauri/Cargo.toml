@@ -19,6 +19,7 @@ shehata-github = { path = "../../../crates/shehata-github" }
 shehata-storage = { path = "../../../crates/shehata-storage" }
 
 tauri = { version = "2.11", features = [] }
+tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 
