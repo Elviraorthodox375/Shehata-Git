@@ -22,6 +22,10 @@
   <sub>Windows 10/11 · macOS (Apple Silicon) · MIT licensed · no account required to try</sub>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/overview.png" width="820" alt="Shehata Git overview showing three GitHub identities and three routed repositories" />
+</p>
+
 > [!IMPORTANT]
 > Shehata Git is an early preview and the installers are not code-signed yet.
 > Windows shows a SmartScreen notice (**More info → Run anyway**) and macOS
@@ -55,10 +59,12 @@ when the assigned account is unavailable.
 
 ## Screenshots
 
-| Accounts | Repository assignment | Smart Sync |
+Local paths and account names belonging to private work are blurred.
+
+| Accounts | Repository routing | Agent bridge |
 |---|---|---|
-| ![Every GitHub account discovered from GitHub CLI, each marked ready for routing](docs/screenshots/identity-control.svg) | ![Assigning one GitHub account and commit author to a local repository](docs/screenshots/repository-routing.svg) | ![Smart Sync showing ahead and behind counts before choosing a safe action](docs/screenshots/safe-activity.svg) |
-| Accounts are discovered from GitHub CLI — no passwords, no stored tokens. | Each repository is pinned to one identity, enforced outside the app too. | Fetches first, then offers only a fast-forward pull or a normal push. |
+| ![Signing in through GitHub's own browser flow, with a one-time device code](docs/screenshots/sign-in.png) | ![Three local repositories, each pinned to its own GitHub identity and branch](docs/screenshots/repository-routing.png) | ![Detected coding agents and the permission envelope that limits what they can request](docs/screenshots/agent-bridge.png) |
+| Sign in through GitHub itself. The app never sees a password and never stores a token. | Every repository is pinned to one identity — enforced in the terminal too, not just in the app. | Coding agents get guarded Git access: force push, destructive reset, and token access are never exposed. |
 
 ## Requirements
 
