@@ -307,6 +307,18 @@ pub fn clear_repository_assignment(db: &Database, repository_id: &str) -> Result
     Ok(())
 }
 
+pub fn update_repository_push_policy(
+    db: &Database,
+    repository_id: &str,
+    push_policy: &str,
+) -> Result<(), StorageError> {
+    db.connection().execute(
+        "UPDATE repositories SET push_policy = ?1, updated_at = ?2 WHERE id = ?3",
+        params![push_policy, now(), repository_id],
+    )?;
+    Ok(())
+}
+
 pub fn delete_repository(db: &Database, id: &str) -> Result<(), StorageError> {
     db.connection()
         .execute("DELETE FROM repositories WHERE id = ?1", params![id])?;

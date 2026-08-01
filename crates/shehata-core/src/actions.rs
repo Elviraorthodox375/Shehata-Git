@@ -8,10 +8,14 @@ use std::path::{Component, Path};
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
-use shehata_git::{GitError, GitRunner};
-use shehata_storage::{queries, Database, NewAuditEvent, RepositoryRecord};
+use shehata_git::{
+    parse_remote_url, read_local_config_values, GitError, GitRunner, RemoteProtocol,
+};
+use shehata_github::GhRunner;
+use shehata_storage::{queries, AccountRecord, Database, NewAuditEvent, RepositoryRecord};
 
 use crate::error::{Result, ShehataError};
+use crate::models::PushPolicy;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ChangeEntry {
@@ -48,9 +52,96 @@ pub struct GitActionResult {
     pub commit: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionCaller {
+    Desktop,
+    Cli,
+    Mcp,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RepositoryActionRequest {
+    pub repository_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PushRequest {
+    pub repository_id: String,
+    pub caller: ActionCaller,
+    #[serde(default)]
+    pub approved: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SetPushPolicyRequest {
+    pub repository_id: String,
+    pub push_policy: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PushPolicyResult {
+    pub repository_id: String,
+    pub push_policy: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NetworkActionResult {
+    pub repository_id: String,
+    pub action: String,
+    pub remote_name: String,
+    pub branch: String,
+    pub account_login: String,
+    pub head_commit: String,
+    pub ahead_before: usize,
+    pub behind_before: usize,
+}
+
+#[derive(Debug)]
+struct NetworkPlan {
+    repository: RepositoryRecord,
+    account: AccountRecord,
+    remote_name: String,
+    remote_branch: String,
+    branch: String,
+    ahead: usize,
+    behind: usize,
+}
+
 pub async fn status(repository_id: &str) -> Result<RepositoryActionStatus> {
     let db_path = Database::default_path()?;
     status_at(&db_path, repository_id).await
+}
+
+pub fn set_push_policy(request: SetPushPolicyRequest) -> Result<PushPolicyResult> {
+    let db_path = Database::default_path()?;
+    set_push_policy_at(&db_path, request)
+}
+
+fn set_push_policy_at(db_path: &Path, request: SetPushPolicyRequest) -> Result<PushPolicyResult> {
+    let repository = load_repository(db_path, &request.repository_id)?;
+    require_assignment(&repository)?;
+    let policy = PushPolicy::parse(request.push_policy.trim()).ok_or_else(|| {
+        ShehataError::InvalidInput("unsupported repository push policy".to_string())
+    })?;
+    let db = Database::open_at(db_path)?;
+    queries::update_repository_push_policy(&db, &repository.id, policy.as_str())?;
+    queries::insert_audit_event(
+        &db,
+        &NewAuditEvent {
+            event_type: "push_policy_changed",
+            repository_id: Some(&repository.id),
+            account_login: None,
+            summary: "Updated repository push policy",
+            result: "success",
+            exit_code: Some(0),
+            duration_ms: None,
+        },
+    )?;
+    Ok(PushPolicyResult {
+        repository_id: repository.id,
+        push_policy: policy.as_str().to_string(),
+    })
 }
 
 pub async fn status_at(db_path: &Path, repository_id: &str) -> Result<RepositoryActionStatus> {
@@ -180,6 +271,389 @@ pub async fn commit_at(db_path: &Path, request: CommitRequest) -> Result<GitActi
     }
 }
 
+pub async fn pull_ff_only(request: RepositoryActionRequest) -> Result<NetworkActionResult> {
+    let db_path = Database::default_path()?;
+    pull_ff_only_at(&db_path, request, true).await
+}
+
+async fn pull_ff_only_at(
+    db_path: &Path,
+    request: RepositoryActionRequest,
+    check_token: bool,
+) -> Result<NetworkActionResult> {
+    let started = Instant::now();
+    let plan =
+        prepare_network_plan(db_path, &request.repository_id, None, false, check_token).await?;
+    let git = GitRunner::locate()?;
+    let path = Path::new(&plan.repository.canonical_path);
+    let result = execute_pull(&git, path, &plan.remote_name, &plan.remote_branch).await;
+    finish_network_action(db_path, plan, "pull_ff_only", result, started).await
+}
+
+pub async fn push(request: PushRequest) -> Result<NetworkActionResult> {
+    let db_path = Database::default_path()?;
+    push_at(&db_path, request, true).await
+}
+
+async fn push_at(
+    db_path: &Path,
+    request: PushRequest,
+    check_token: bool,
+) -> Result<NetworkActionResult> {
+    let started = Instant::now();
+    let plan_result = prepare_network_plan(
+        db_path,
+        &request.repository_id,
+        Some(request.caller),
+        request.approved,
+        check_token,
+    )
+    .await;
+    let plan = match plan_result {
+        Ok(plan) => plan,
+        Err(error) => {
+            if uuid::Uuid::parse_str(request.repository_id.trim()).is_ok() {
+                write_network_audit(
+                    db_path,
+                    request.repository_id.trim(),
+                    None,
+                    "push_preflight",
+                    "Push preflight blocked the operation",
+                    "blocked",
+                    None,
+                    started,
+                )?;
+            }
+            return Err(error);
+        }
+    };
+
+    write_network_audit(
+        db_path,
+        &plan.repository.id,
+        Some(&plan.account.login),
+        "push_preflight",
+        "Push preflight passed",
+        "success",
+        Some(0),
+        started,
+    )?;
+    let git = GitRunner::locate()?;
+    let path = Path::new(&plan.repository.canonical_path);
+    let result = execute_push(&git, path, &plan.remote_name, &plan.remote_branch).await;
+    finish_network_action(db_path, plan, "push", result, started).await
+}
+
+async fn prepare_network_plan(
+    db_path: &Path,
+    repository_id: &str,
+    push_caller: Option<ActionCaller>,
+    approved: bool,
+    check_token: bool,
+) -> Result<NetworkPlan> {
+    let (repository, account) = load_linked_repository(db_path, repository_id)?;
+    let repo_path = Path::new(&repository.canonical_path);
+    let git = GitRunner::locate()?;
+
+    let helper_path = crate::routing::locate_helper()?;
+    let expected_helper = crate::routing::helper_config_value(&helper_path, &repository.id)?;
+    ensure_routing_configured(&git, repo_path, &expected_helper, &repository.id).await?;
+
+    let expected_url = repository.remote_url.as_deref().ok_or_else(|| {
+        ShehataError::InvalidInput("repository has no expected remote URL".to_string())
+    })?;
+    let expected = parse_remote_url(expected_url)
+        .map_err(|_| ShehataError::InvalidInput("expected remote URL is invalid".to_string()))?;
+    if expected.protocol != RemoteProtocol::Https
+        || !expected.host.eq_ignore_ascii_case(&account.host)
+    {
+        return Err(ShehataError::AuthenticationFailed);
+    }
+
+    let branch_output = git
+        .run_in(
+            Some(repo_path),
+            &["symbolic-ref", "--quiet", "--short", "HEAD"],
+        )
+        .await?;
+    let branch = if branch_output.success() {
+        branch_output.stdout.trim().to_string()
+    } else {
+        return Err(ShehataError::DetachedHead);
+    };
+    validate_git_ref(&git, repo_path, &branch).await?;
+
+    let conflicts = git
+        .run_checked(Some(repo_path), &["diff", "--name-only", "--diff-filter=U"])
+        .await?;
+    if !conflicts.stdout.trim().is_empty() {
+        return Err(ShehataError::ConflictsPresent);
+    }
+
+    let upstream_output = git
+        .run_in(
+            Some(repo_path),
+            &[
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}",
+            ],
+        )
+        .await?;
+    if !upstream_output.success() {
+        return Err(ShehataError::NoUpstream);
+    }
+    let upstream = upstream_output.stdout.trim();
+    let (remote_name, remote_branch) = upstream
+        .split_once('/')
+        .filter(|(remote, branch)| !remote.is_empty() && !branch.is_empty())
+        .ok_or(ShehataError::NoUpstream)?;
+    validate_remote_name(remote_name)?;
+    validate_git_ref(&git, repo_path, remote_branch).await?;
+
+    let actual_url = git
+        .run_checked(Some(repo_path), &["remote", "get-url", remote_name])
+        .await?
+        .stdout;
+    let actual = parse_remote_url(actual_url.trim())
+        .map_err(|_| ShehataError::InvalidInput("upstream remote must use HTTPS".to_string()))?;
+    if actual.protocol != RemoteProtocol::Https
+        || !actual.host.eq_ignore_ascii_case(&expected.host)
+        || !actual.owner.eq_ignore_ascii_case(&expected.owner)
+        || !actual.repo.eq_ignore_ascii_case(&expected.repo)
+    {
+        return Err(ShehataError::OperationBlocked(
+            "upstream remote does not match the linked repository".to_string(),
+        ));
+    }
+
+    if check_token {
+        let gh = GhRunner::locate().map_err(|_| ShehataError::AuthenticationFailed)?;
+        let token = gh
+            .token_for(&account.host, &account.login)
+            .await
+            .map_err(|_| ShehataError::AuthenticationFailed)?;
+        drop(token);
+    }
+
+    // Refresh only remote-tracking refs. No merge, checkout, or worktree write.
+    git.run_checked(
+        Some(repo_path),
+        &["fetch", "--quiet", "--prune", remote_name],
+    )
+    .await?;
+    let counts = git
+        .run_in(
+            Some(repo_path),
+            &["rev-list", "--left-right", "--count", "HEAD...@{upstream}"],
+        )
+        .await?;
+    if !counts.success() {
+        return Err(ShehataError::NoUpstream);
+    }
+    let (ahead, behind) = parse_ahead_behind(&counts.stdout)?;
+
+    if push_caller.is_some() && behind > 0 {
+        return Err(ShehataError::NonFastForward);
+    }
+    if let Some(caller) = push_caller {
+        enforce_push_policy(&repository.push_policy, caller, approved)?;
+    }
+
+    Ok(NetworkPlan {
+        repository,
+        account,
+        remote_name: remote_name.to_string(),
+        remote_branch: remote_branch.to_string(),
+        branch,
+        ahead,
+        behind,
+    })
+}
+
+async fn finish_network_action(
+    db_path: &Path,
+    plan: NetworkPlan,
+    action: &str,
+    result: std::result::Result<shehata_git::CommandOutput, GitError>,
+    started: Instant,
+) -> Result<NetworkActionResult> {
+    match result {
+        Ok(_) => {
+            let head_commit = GitRunner::locate()?
+                .run_checked(
+                    Some(Path::new(&plan.repository.canonical_path)),
+                    &["rev-parse", "HEAD"],
+                )
+                .await?
+                .stdout
+                .trim()
+                .to_string();
+            write_network_audit(
+                db_path,
+                &plan.repository.id,
+                Some(&plan.account.login),
+                action,
+                if action == "push" {
+                    "Normal push completed"
+                } else {
+                    "Fast-forward-only pull completed"
+                },
+                "success",
+                Some(0),
+                started,
+            )?;
+            Ok(NetworkActionResult {
+                repository_id: plan.repository.id,
+                action: action.to_string(),
+                remote_name: plan.remote_name,
+                branch: plan.branch,
+                account_login: plan.account.login,
+                head_commit,
+                ahead_before: plan.ahead,
+                behind_before: plan.behind,
+            })
+        }
+        Err(error) => {
+            write_network_audit(
+                db_path,
+                &plan.repository.id,
+                Some(&plan.account.login),
+                action,
+                "Network Git action failed",
+                "failure",
+                git_error_code(&error),
+                started,
+            )?;
+            Err(error.into())
+        }
+    }
+}
+
+async fn ensure_routing_configured(
+    git: &GitRunner,
+    repo_path: &Path,
+    expected_helper: &str,
+    repository_id: &str,
+) -> Result<()> {
+    let helpers = read_local_config_values(git, repo_path, "credential.helper").await?;
+    let use_http_path = read_local_config_values(git, repo_path, "credential.useHttpPath").await?;
+    let configured = helpers.first().is_some_and(String::is_empty)
+        && helpers.iter().any(|helper| helper == expected_helper)
+        && use_http_path.iter().any(|value| value == "true");
+    if !configured {
+        return Err(ShehataError::RepositoryNotLinked(repository_id.to_string()));
+    }
+    Ok(())
+}
+
+fn load_linked_repository(
+    db_path: &Path,
+    repository_id: &str,
+) -> Result<(RepositoryRecord, AccountRecord)> {
+    let repository = load_repository(db_path, repository_id)?;
+    let db = Database::open_at(db_path)?;
+    let account_id = repository
+        .assigned_account_id
+        .ok_or_else(|| ShehataError::RepositoryNotLinked(repository.id.clone()))?;
+    let account = queries::find_account_by_id(&db, account_id)?
+        .ok_or_else(|| ShehataError::RepositoryNotLinked(repository.id.clone()))?;
+    if account.status != "valid" {
+        return Err(ShehataError::AccountNotAvailable {
+            host: account.host,
+            login: account.login,
+        });
+    }
+    Ok((repository, account))
+}
+
+async fn validate_git_ref(git: &GitRunner, repo_path: &Path, value: &str) -> Result<()> {
+    if value.contains(['\0', '\r', '\n']) {
+        return Err(ShehataError::InvalidInput("invalid Git ref".to_string()));
+    }
+    let output = git
+        .run_in(Some(repo_path), &["check-ref-format", "--branch", value])
+        .await?;
+    if !output.success() {
+        return Err(ShehataError::InvalidInput("invalid Git ref".to_string()));
+    }
+    Ok(())
+}
+
+fn validate_remote_name(value: &str) -> Result<()> {
+    if value.is_empty()
+        || value.starts_with('-')
+        || value.len() > 255
+        || value.contains(['\0', '\r', '\n'])
+    {
+        return Err(ShehataError::InvalidInput(
+            "invalid upstream remote name".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn parse_ahead_behind(value: &str) -> Result<(usize, usize)> {
+    let mut values = value.split_whitespace();
+    let ahead = values
+        .next()
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(|| ShehataError::Internal("invalid ahead/behind output".to_string()))?;
+    let behind = values
+        .next()
+        .and_then(|value| value.parse().ok())
+        .ok_or_else(|| ShehataError::Internal("invalid ahead/behind output".to_string()))?;
+    if values.next().is_some() {
+        return Err(ShehataError::Internal(
+            "invalid ahead/behind output".to_string(),
+        ));
+    }
+    Ok((ahead, behind))
+}
+
+fn enforce_push_policy(policy: &str, caller: ActionCaller, approved: bool) -> Result<()> {
+    let policy = PushPolicy::parse(policy).ok_or_else(|| {
+        ShehataError::OperationBlocked("repository push policy is invalid".to_string())
+    })?;
+    match policy {
+        PushPolicy::AllowNormalPush => Ok(()),
+        PushPolicy::AskBeforePush if approved => Ok(()),
+        PushPolicy::AskBeforePush => Err(ShehataError::ApprovalRequired),
+        PushPolicy::BlockAiPush if caller == ActionCaller::Mcp => Err(
+            ShehataError::OperationBlocked("AI pushes are blocked for this repository".to_string()),
+        ),
+        PushPolicy::BlockAiPush => Ok(()),
+    }
+}
+
+async fn execute_pull(
+    git: &GitRunner,
+    repo_path: &Path,
+    remote_name: &str,
+    remote_branch: &str,
+) -> std::result::Result<shehata_git::CommandOutput, GitError> {
+    git.run_checked(
+        Some(repo_path),
+        &["pull", "--ff-only", "--no-edit", remote_name, remote_branch],
+    )
+    .await
+}
+
+async fn execute_push(
+    git: &GitRunner,
+    repo_path: &Path,
+    remote_name: &str,
+    remote_branch: &str,
+) -> std::result::Result<shehata_git::CommandOutput, GitError> {
+    let destination = format!("HEAD:refs/heads/{remote_branch}");
+    git.run_checked(
+        Some(repo_path),
+        &["push", "--porcelain", remote_name, &destination],
+    )
+    .await
+}
+
 async fn run_paths_action(
     db_path: &Path,
     request: PathsRequest,
@@ -262,8 +736,11 @@ async fn run_paths_action(
 }
 
 fn load_repository(db_path: &Path, repository_id: &str) -> Result<RepositoryRecord> {
+    let repository_id = repository_id.trim();
+    uuid::Uuid::parse_str(repository_id)
+        .map_err(|_| ShehataError::InvalidInput("invalid repository id".to_string()))?;
     let db = Database::open_at(db_path)?;
-    queries::find_repository_by_id(&db, repository_id.trim())?
+    queries::find_repository_by_id(&db, repository_id)?
         .ok_or_else(|| ShehataError::RepositoryNotFound(repository_id.to_string()))
 }
 
@@ -391,6 +868,33 @@ fn write_audit(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn write_network_audit(
+    db_path: &Path,
+    repository_id: &str,
+    account_login: Option<&str>,
+    event_type: &str,
+    summary: &str,
+    result: &str,
+    exit_code: Option<i64>,
+    started: Instant,
+) -> Result<()> {
+    let db = Database::open_at(db_path)?;
+    queries::insert_audit_event(
+        &db,
+        &NewAuditEvent {
+            event_type,
+            repository_id: Some(repository_id),
+            account_login,
+            summary,
+            result,
+            exit_code,
+            duration_ms: Some(started.elapsed().as_millis().min(i64::MAX as u128) as i64),
+        },
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -411,6 +915,21 @@ mod tests {
             .status()
             .unwrap()
             .success());
+    }
+
+    fn git_output(repo: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim().to_string()
     }
 
     fn fixture() -> (TempDir, PathBuf, PathBuf, String) {
@@ -510,5 +1029,115 @@ mod tests {
         assert!(validate_paths(vec!["../secret".into()]).is_err());
         assert!(validate_paths(vec![".git/config".into()]).is_err());
         assert!(validate_paths(vec!["-danger".into()]).is_ok());
+    }
+
+    #[test]
+    fn enforces_push_policies_by_caller_and_approval() {
+        assert!(enforce_push_policy("allow_normal_push", ActionCaller::Mcp, false).is_ok());
+        assert!(matches!(
+            enforce_push_policy("ask_before_push", ActionCaller::Desktop, false),
+            Err(ShehataError::ApprovalRequired)
+        ));
+        assert!(enforce_push_policy("ask_before_push", ActionCaller::Desktop, true).is_ok());
+        assert!(matches!(
+            enforce_push_policy("block_ai_push", ActionCaller::Mcp, true),
+            Err(ShehataError::OperationBlocked(_))
+        ));
+        assert!(enforce_push_policy("block_ai_push", ActionCaller::Cli, false).is_ok());
+    }
+
+    #[test]
+    fn persists_only_supported_push_policies() {
+        let (_temp, _repo, db_path, id) = fixture();
+        let result = set_push_policy_at(
+            &db_path,
+            SetPushPolicyRequest {
+                repository_id: id.clone(),
+                push_policy: "ask_before_push".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(result.push_policy, "ask_before_push");
+        let db = Database::open_at(&db_path).unwrap();
+        assert_eq!(
+            queries::find_repository_by_id(&db, &id)
+                .unwrap()
+                .unwrap()
+                .push_policy,
+            "ask_before_push"
+        );
+        assert!(set_push_policy_at(
+            &db_path,
+            SetPushPolicyRequest {
+                repository_id: id,
+                push_policy: "force_push".into(),
+            },
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn parses_ahead_and_behind_strictly() {
+        assert_eq!(parse_ahead_behind("2\t3\n").unwrap(), (2, 3));
+        assert!(parse_ahead_behind("2").is_err());
+        assert!(parse_ahead_behind("2 3 extra").is_err());
+    }
+
+    #[tokio::test]
+    async fn fixed_network_commands_pull_ff_only_and_push_normally() {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote.git");
+        assert!(Command::new("git")
+            .args(["init", "--bare"])
+            .arg(&remote)
+            .status()
+            .unwrap()
+            .success());
+
+        let first = temp.path().join("first");
+        fs::create_dir(&first).unwrap();
+        git(&first, &["init", "--initial-branch=main"]);
+        git(&first, &["config", "user.name", "First User"]);
+        git(&first, &["config", "user.email", "first@example.com"]);
+        fs::write(first.join("one.txt"), "one").unwrap();
+        git(&first, &["add", "--", "one.txt"]);
+        git(&first, &["commit", "-m", "feat: first"]);
+        git(
+            &first,
+            &["remote", "add", "origin", &remote.to_string_lossy()],
+        );
+        git(&first, &["push", "-u", "origin", "main"]);
+
+        let second = temp.path().join("second");
+        assert!(Command::new("git")
+            .args(["clone", "--branch", "main"])
+            .arg(&remote)
+            .arg(&second)
+            .status()
+            .unwrap()
+            .success());
+        git(&second, &["config", "user.name", "Second User"]);
+        git(&second, &["config", "user.email", "second@example.com"]);
+        fs::write(second.join("two.txt"), "two").unwrap();
+        git(&second, &["add", "--", "two.txt"]);
+        git(&second, &["commit", "-m", "feat: second"]);
+        git(&second, &["push", "origin", "main"]);
+
+        let runner = GitRunner::locate().unwrap();
+        execute_pull(&runner, &first, "origin", "main")
+            .await
+            .unwrap();
+        assert!(first.join("two.txt").is_file());
+
+        fs::write(first.join("three.txt"), "three").unwrap();
+        git(&first, &["add", "--", "three.txt"]);
+        git(&first, &["commit", "-m", "feat: third"]);
+        execute_push(&runner, &first, "origin", "main")
+            .await
+            .unwrap();
+        assert_eq!(
+            git_output(&first, &["rev-parse", "HEAD"]),
+            git_output(&remote, &["rev-parse", "refs/heads/main"])
+        );
     }
 }

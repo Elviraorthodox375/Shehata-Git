@@ -13,8 +13,15 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 - Commit rejects empty staged sets and unresolved conflicts, never exposes amend, and records safe success/failure audit events.
 - Added a real temporary-repository test covering status, first-commit stage/unstage, normal commit, and clean post-commit status.
 - Added a professional Changes dialog to repository rows with file-state selection, Stage selected, Unstage selected, and commit-message controls.
-- Pull `--ff-only`, push preflight, push policy enforcement, and network acceptance remain for the next Phase 7 increment.
-- Final repository gate passed: workspace formatting, clippy with warnings denied, all 55 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+- Added pull using fixed `--ff-only` arguments and normal push using an explicit existing upstream destination; force, force-with-lease, deletion, amend, rebase, hard reset, and arbitrary commands are not exposed.
+- Push preflight verifies the exact installed helper configuration, assigned account token availability, HTTPS host/owner/repository match, branch/ref safety, attached HEAD, conflicts, upstream, freshly fetched ahead/behind state, non-fast-forward risk, and repository policy.
+- Added safe audit records for preflight, pull, push, policy changes, successes, failures, and blocks without storing command output or credentials.
+- Added repository policies for allow normal push, require approval, and block AI push, with a validated selector in the Changes dialog.
+- Added a real two-worktree/local-bare-remote test proving fast-forward-only pull and normal push behavior with the fixed production command builders.
+- Rejected unencrypted HTTP remote URLs; automatic credential routing remains HTTPS-only.
+- Built and visually inspected the native debug app and Repositories page. The Changes dialog was not opened because the owner's app database has no authenticated account/repository, and visual QA did not create fake persistent user data.
+- Real GitHub pull/push acceptance through the owner's two authenticated accounts remains pending.
+- Final repository gate passed: workspace formatting, clippy with warnings denied, all 60 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
 
 ---
 

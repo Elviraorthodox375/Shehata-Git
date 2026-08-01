@@ -157,6 +157,32 @@ async fn repositories_commit(
 }
 
 #[tauri::command]
+async fn repositories_pull(
+    request: core_actions::RepositoryActionRequest,
+) -> Result<core_actions::NetworkActionResult, String> {
+    core_actions::pull_ff_only(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_push(
+    request: core_actions::PushRequest,
+) -> Result<core_actions::NetworkActionResult, String> {
+    core_actions::push(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+fn repositories_set_push_policy(
+    request: core_actions::SetPushPolicyRequest,
+) -> Result<core_actions::PushPolicyResult, String> {
+    core_actions::set_push_policy(request)
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
 fn audit_list() -> Result<Vec<shehata_storage::AuditEventRecord>, String> {
     let db = open_db()?;
     queries::list_audit_events(&db, 200)
@@ -214,6 +240,9 @@ pub fn run() {
             repositories_stage,
             repositories_unstage,
             repositories_commit,
+            repositories_pull,
+            repositories_push,
+            repositories_set_push_policy,
             audit_list,
             mcp_info,
         ])

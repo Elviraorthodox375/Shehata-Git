@@ -79,6 +79,29 @@ export function commitRepository(repositoryId: string, message: string): Promise
   });
 }
 
+export function pullRepository(repositoryId: string): Promise<NetworkActionResult> {
+  return invoke<NetworkActionResult>("repositories_pull", {
+    request: { repository_id: repositoryId },
+  });
+}
+
+export function pushRepository(repositoryId: string): Promise<NetworkActionResult> {
+  return invoke<NetworkActionResult>("repositories_push", {
+    request: { repository_id: repositoryId, caller: "desktop", approved: true },
+  });
+}
+
+export type PushPolicy = "allow_normal_push" | "ask_before_push" | "block_ai_push";
+
+export function setRepositoryPushPolicy(
+  repositoryId: string,
+  pushPolicy: PushPolicy,
+): Promise<PushPolicyResult> {
+  return invoke<PushPolicyResult>("repositories_set_push_policy", {
+    request: { repository_id: repositoryId, push_policy: pushPolicy },
+  });
+}
+
 export function listAuditEvents(): Promise<AuditEvent[]> {
   return invoke<AuditEvent[]>("audit_list");
 }
@@ -144,4 +167,20 @@ export interface GitActionResult {
   action: string;
   changed_paths: number;
   commit: string | null;
+}
+
+export interface NetworkActionResult {
+  repository_id: string;
+  action: string;
+  remote_name: string;
+  branch: string;
+  account_login: string;
+  head_commit: string;
+  ahead_before: number;
+  behind_before: number;
+}
+
+export interface PushPolicyResult {
+  repository_id: string;
+  push_policy: PushPolicy;
 }

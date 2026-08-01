@@ -30,7 +30,11 @@ import {
   linkRepository,
   listAccounts,
   listRepositories,
+  type PushPolicy,
+  pullRepository,
+  pushRepository,
   type RepositoryActionStatus,
+  setRepositoryPushPolicy,
   stageRepositoryPaths,
   testRepositoryConnection,
   unlinkRepository,
@@ -418,13 +422,19 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState("");
+  const [networkNotice, setNetworkNotice] = useState<string | null>(null);
+  const [pushPolicy, setPushPolicy] = useState<PushPolicy>(normalizePushPolicy(repo.push_policy));
   const status = useQuery({
     queryKey: ["repository-status", repo.id],
     queryFn: () => getRepositoryStatus(repo.id),
   });
   const refresh = async () => {
     setSelected(new Set());
-    await queryClient.invalidateQueries({ queryKey: ["repository-status", repo.id] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["repository-status", repo.id] }),
+      queryClient.invalidateQueries({ queryKey: ["repositories"] }),
+      queryClient.invalidateQueries({ queryKey: ["audit"] }),
+    ]);
   };
   const stage = useMutation({
     mutationFn: (paths: string[]) => stageRepositoryPaths(repo.id, paths),
@@ -441,8 +451,47 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
       await refresh();
     },
   });
-  const pending = stage.isPending || unstage.isPending || commit.isPending;
-  const error = stage.error ?? unstage.error ?? commit.error ?? status.error;
+  const pull = useMutation({
+    mutationFn: () => pullRepository(repo.id),
+    onSuccess: async (result) => {
+      setNetworkNotice(
+        `Fast-forward pull completed on ${result.branch} through @${result.account_login}.`,
+      );
+      await refresh();
+    },
+  });
+  const push = useMutation({
+    mutationFn: () => pushRepository(repo.id),
+    onSuccess: async (result) => {
+      setNetworkNotice(
+        `Normal push completed to ${result.remote_name}/${result.branch} through @${result.account_login}.`,
+      );
+      await refresh();
+    },
+  });
+  const policy = useMutation({
+    mutationFn: (value: PushPolicy) => setRepositoryPushPolicy(repo.id, value),
+    onSuccess: async (result) => {
+      setPushPolicy(result.push_policy);
+      setNetworkNotice("Push policy updated for this repository.");
+      await queryClient.invalidateQueries({ queryKey: ["repositories"] });
+    },
+  });
+  const pending =
+    stage.isPending ||
+    unstage.isPending ||
+    commit.isPending ||
+    pull.isPending ||
+    push.isPending ||
+    policy.isPending;
+  const error =
+    stage.error ??
+    unstage.error ??
+    commit.error ??
+    pull.error ??
+    push.error ??
+    policy.error ??
+    status.error;
   const selectedPaths = [...selected];
   const stagedCount = status.data?.changes.filter(isStaged).length ?? 0;
 
@@ -453,6 +502,15 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
       else next.add(path);
       return next;
     });
+  }
+
+  async function confirmPush() {
+    setNetworkNotice(null);
+    const approved = await confirmDialog(
+      `Push ${repo.display_name} normally through @${repo.assigned_login}? Force push is never used.`,
+      { title: "Confirm normal push", kind: "warning" },
+    );
+    if (approved) push.mutate();
   }
 
   return (
@@ -538,6 +596,13 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
             </div>
           )}
 
+          {networkNotice && (
+            <div className="mt-4 flex gap-3 border border-success/25 bg-success/[0.06] p-3">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden />
+              <p className="text-sm text-success">{networkNotice}</p>
+            </div>
+          )}
+
           <div className="mt-6 border-t border-border pt-5">
             <label className="space-y-2 text-sm font-medium">
               <span>Commit message</span>
@@ -551,6 +616,69 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
               />
             </label>
           </div>
+
+          <div className="mt-6 flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="data-label">REMOTE SYNC / SAFE MODE</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Pull is fast-forward only. Push runs full preflight and never uses force.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={
+                  pending || !repo.routing_configured || !status.data || status.data.detached_head
+                }
+                onClick={() => {
+                  setNetworkNotice(null);
+                  pull.mutate();
+                }}
+              >
+                {pull.isPending ? (
+                  <Loader2 className="animate-spin" aria-hidden />
+                ) : (
+                  <RefreshCw aria-hidden />
+                )}
+                Pull FF-only
+              </Button>
+              <Button
+                size="sm"
+                disabled={
+                  pending || !repo.routing_configured || !status.data || status.data.detached_head
+                }
+                onClick={confirmPush}
+              >
+                {push.isPending ? (
+                  <Loader2 className="animate-spin" aria-hidden />
+                ) : (
+                  <ShieldCheck aria-hidden />
+                )}
+                Normal push
+              </Button>
+            </div>
+          </div>
+
+          <label className="mt-4 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-muted-foreground">Push policy for this repository</span>
+            <select
+              value={pushPolicy}
+              disabled={pending}
+              onChange={(event) => policy.mutate(event.target.value as PushPolicy)}
+              className="h-9 rounded-[0.45rem] border border-input bg-background/60 px-3 text-xs font-medium outline-none focus:border-primary"
+            >
+              <option value="allow_normal_push">Allow normal push</option>
+              <option value="ask_before_push">Require approval</option>
+              <option value="block_ai_push">Block AI push</option>
+            </select>
+          </label>
+
+          {!repo.routing_configured && (
+            <p className="mt-3 text-xs text-warning">
+              Enable credential routing before using remote sync.
+            </p>
+          )}
         </div>
 
         <footer className="flex flex-col gap-3 border-t border-border bg-background/20 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -593,6 +721,11 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
 
 function isStaged(change: RepositoryActionStatus["changes"][number]): boolean {
   return change.index_status !== " " && change.index_status !== "?";
+}
+
+function normalizePushPolicy(value: string): PushPolicy {
+  if (value === "ask_before_push" || value === "block_ai_push") return value;
+  return "allow_normal_push";
 }
 
 function AssignmentDialog({

@@ -67,7 +67,7 @@ pub fn parse_remote_url(input: &str) -> Result<RemoteUrl, RemoteParseError> {
             .ok_or_else(|| RemoteParseError::NoHost(raw.to_string()))?
             .to_string();
         let protocol = match parsed.scheme() {
-            "https" | "http" => RemoteProtocol::Https,
+            "https" => RemoteProtocol::Https,
             "ssh" | "git+ssh" => RemoteProtocol::Ssh,
             other => return Err(RemoteParseError::UnsupportedFormat(other.to_string())),
         };
@@ -157,6 +157,11 @@ mod tests {
     #[test]
     fn rejects_garbage() {
         assert!(parse_remote_url("not-a-url").is_err());
+    }
+
+    #[test]
+    fn rejects_unencrypted_http() {
+        assert!(parse_remote_url("http://github.com/acme/repo.git").is_err());
     }
 
     #[test]

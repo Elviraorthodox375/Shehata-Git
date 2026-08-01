@@ -57,7 +57,10 @@
 - ✅ Status and selected-path stage/unstage.
 - ✅ Normal commit with conflict checks and audit events.
 - ✅ Desktop Changes workflow.
-- Pull `--ff-only`, push with preflight, and push policies remain.
+- ✅ Pull `--ff-only` and normal push command paths.
+- ✅ Full push preflight, non-fast-forward protection, policies, and audit events.
+- ✅ Real local-remote pull/push regression test.
+- Real GitHub acceptance remains pending authenticated owner repositories.
 
 ## Phase 8 — CLI ⬜
 

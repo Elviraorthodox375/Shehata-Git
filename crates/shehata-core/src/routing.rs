@@ -284,7 +284,7 @@ fn load_plan(db_path: &Path, repository_id: &str) -> Result<RoutingPlan> {
     })
 }
 
-fn locate_helper() -> Result<PathBuf> {
+pub(crate) fn locate_helper() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("SHEHATA_HELPER_PATH") {
         let path = PathBuf::from(path);
         if path.is_file() {
@@ -304,7 +304,7 @@ fn locate_helper() -> Result<PathBuf> {
     which::which("git-credential-shehata").map_err(|_| ShehataError::CredentialHelperMissing)
 }
 
-fn helper_config_value(path: &Path, repository_id: &str) -> Result<String> {
+pub(crate) fn helper_config_value(path: &Path, repository_id: &str) -> Result<String> {
     if !path.is_file() {
         return Err(ShehataError::CredentialHelperMissing);
     }
