@@ -67,6 +67,15 @@ pnpm --filter @shehata/desktop build
 For UI changes, also test keyboard navigation, 200% zoom, reduced motion,
 reduced transparency, and both layout-spacing modes.
 
+### Disk space
+
+Repeated debug builds of this workspace grow past 15 GB. Reclaim that space
+without touching release artifacts:
+
+```bash
+cargo clean --profile dev
+```
+
 ## Commits and pull requests
 
 Use Conventional Commits, for example:
