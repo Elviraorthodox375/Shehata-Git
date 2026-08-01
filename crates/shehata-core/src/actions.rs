@@ -584,7 +584,17 @@ async fn prepare_network_plan(
     check_token: bool,
     allow_missing_upstream: bool,
 ) -> Result<NetworkPlan> {
-    let (repository, account) = load_linked_repository(db_path, repository_id)?;
+    let (repository, account) = match load_linked_repository(db_path, repository_id) {
+        Err(ShehataError::AccountNotAvailable { .. }) => {
+            // The stored account state can be stale: a token probe that failed
+            // during a network outage stays recorded as unavailable. Re-read
+            // live GitHub CLI state once before refusing, so a temporary
+            // problem does not require a manual refresh to clear.
+            refresh_account_mirror(db_path).await;
+            load_linked_repository(db_path, repository_id)?
+        }
+        other => other?,
+    };
     let repo_path = Path::new(&repository.canonical_path);
     let git = GitRunner::locate()?;
 
@@ -858,6 +868,22 @@ async fn ensure_routing_configured(
         return Err(ShehataError::RepositoryNotLinked(repository_id.to_string()));
     }
     Ok(())
+}
+
+/// Re-read live GitHub CLI accounts into the local mirror.
+///
+/// Failure is deliberately ignored: this only ever tries to clear a stale
+/// "unavailable" mark, and the caller re-checks the stored state afterwards.
+async fn refresh_account_mirror(db_path: &Path) {
+    let Ok(gh) = GhRunner::locate() else {
+        return;
+    };
+    let Ok(accounts) = crate::accounts::list_accounts(&gh).await else {
+        return;
+    };
+    if let Ok(db) = Database::open_at(db_path) {
+        crate::accounts::mirror_accounts(&db, &accounts);
+    }
 }
 
 fn load_linked_repository(

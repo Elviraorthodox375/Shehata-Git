@@ -4,6 +4,16 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.15 - 2026-08-02
+
+### Fixed
+
+- A network action no longer refuses to run because of a stale account state.
+  A token probe that failed during an outage used to stay recorded as
+  unavailable until the accounts page was refreshed by hand; live GitHub CLI
+  state is now re-read once before the action is refused. Routing still fails
+  closed — it never falls through to a different account.
+
 ## 0.1.14 - 2026-08-02
 
 ### Changed

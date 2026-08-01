@@ -3517,7 +3517,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-cli"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "clap",
  "serde",
@@ -3537,7 +3537,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-core"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "chrono",
  "directories",
@@ -3560,7 +3560,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-credential-helper"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -3579,7 +3579,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-desktop"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "serde",
  "serde_json",
@@ -3599,7 +3599,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-git"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "serde",
  "serde_json",
@@ -3613,7 +3613,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-github"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "secrecy",
  "serde",
@@ -3628,7 +3628,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-mcp"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "rmcp",
  "serde",
@@ -3646,7 +3646,7 @@ dependencies = [
 
 [[package]]
 name = "shehata-storage"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "chrono",
  "directories",
