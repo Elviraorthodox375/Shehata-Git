@@ -32,6 +32,25 @@ export function assignRepository(request: AssignRepositoryRequest): Promise<Assi
   return invoke<AssignmentResult>("repositories_assign", { request });
 }
 
+export function linkRepository(repositoryId: string): Promise<RoutingResult> {
+  return invoke<RoutingResult>("repositories_link", {
+    request: { repository_id: repositoryId },
+  });
+}
+
+export function testRepositoryConnection(repositoryId: string): Promise<ConnectionTestResult> {
+  return invoke<ConnectionTestResult>("repositories_test", { repositoryId });
+}
+
+export function unlinkRepository(
+  repositoryId: string,
+  restoreIdentity: boolean,
+): Promise<UnlinkResult> {
+  return invoke<UnlinkResult>("repositories_unlink", {
+    request: { repository_id: repositoryId, restore_identity: restoreIdentity },
+  });
+}
+
 export function listAuditEvents(): Promise<AuditEvent[]> {
   return invoke<AuditEvent[]>("audit_list");
 }
@@ -58,4 +77,23 @@ export interface AssignmentResult {
   repository: RepositorySummary;
   marker_path: string;
   identity_changed: boolean;
+}
+
+export interface RoutingResult {
+  repository_id: string;
+  helper_path: string;
+  configured: boolean;
+}
+
+export interface ConnectionTestResult {
+  repository_id: string;
+  remote_name: string;
+  account_login: string;
+  success: boolean;
+}
+
+export interface UnlinkResult {
+  repository_id: string;
+  restored_keys: string[];
+  identity_preserved: boolean;
 }

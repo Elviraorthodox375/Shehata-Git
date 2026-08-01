@@ -50,6 +50,7 @@ export interface RepositorySummary {
   commit_name: string | null;
   commit_email: string | null;
   push_policy: string;
+  routing_configured: boolean;
 }
 
 export interface AuditEvent {

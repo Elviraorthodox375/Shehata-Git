@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
 import {
   AlertCircle,
   ArrowRight,
@@ -10,15 +10,25 @@ import {
   Globe,
   KeyRound,
   Loader2,
+  PlugZap,
   RefreshCw,
   ShieldCheck,
+  Unplug,
   UserRound,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { addRepository, assignRepository, listAccounts, listRepositories } from "@/lib/tauri";
+import {
+  addRepository,
+  assignRepository,
+  linkRepository,
+  listAccounts,
+  listRepositories,
+  testRepositoryConnection,
+  unlinkRepository,
+} from "@/lib/tauri";
 import type { GhAccount, RepositorySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -36,16 +46,44 @@ export function RepositoriesPage() {
   });
   const assign = useMutation({
     mutationFn: assignRepository,
-    onSuccess: (result) => {
-      queryClient.setQueryData<RepositorySummary[]>(["repositories"], (current) =>
-        current?.map((repo) => (repo.id === result.repository.id ? result.repository : repo)),
-      );
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ["repositories"] });
       setAssignmentNotice(
         `${result.repository.display_name} is now locked to @${result.repository.assigned_login}.`,
       );
       setSelectedRepo(null);
     },
   });
+  const link = useMutation({
+    mutationFn: linkRepository,
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      setAssignmentNotice(`Credential routing is active for repository ${result.repository_id}.`);
+    },
+  });
+  const connectionTest = useMutation({
+    mutationFn: testRepositoryConnection,
+    onSuccess: (result) => {
+      setAssignmentNotice(
+        `Connection verified through @${result.account_login} on ${result.remote_name}.`,
+      );
+    },
+  });
+  const unlink = useMutation({
+    mutationFn: (repositoryId: string) => unlinkRepository(repositoryId, false),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["repositories"] });
+      setAssignmentNotice("Repository routing was removed and original Git settings restored.");
+    },
+  });
+
+  async function confirmUnlink(repo: RepositorySummary) {
+    const approved = await confirmDialog(
+      `Unlink ${repo.display_name}? Credential settings will be restored; local commit identity will be kept.`,
+      { title: "Unlink repository", kind: "warning" },
+    );
+    if (approved) unlink.mutate(repo.id);
+  }
 
   async function chooseRepository() {
     addRepo.reset();
@@ -117,13 +155,19 @@ export function RepositoriesPage() {
         </div>
       )}
 
-      {(repos.isError || addRepo.isError) && (
+      {(repos.isError ||
+        addRepo.isError ||
+        link.isError ||
+        connectionTest.isError ||
+        unlink.isError) && (
         <div className="flex gap-3 border border-destructive/35 bg-destructive/[0.06] p-4">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
           <div>
             <p className="text-sm font-semibold text-destructive">Repository inspection failed</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {errorMessage(addRepo.error ?? repos.error)}
+              {errorMessage(
+                addRepo.error ?? repos.error ?? link.error ?? connectionTest.error ?? unlink.error,
+              )}
             </p>
           </div>
         </div>
@@ -165,6 +209,14 @@ export function RepositoriesPage() {
               assign.reset();
               setSelectedRepo(repo);
             }}
+            onLink={() => link.mutate(repo.id)}
+            onTest={() => connectionTest.mutate(repo.id)}
+            onUnlink={() => confirmUnlink(repo)}
+            pending={
+              (link.isPending && link.variables === repo.id) ||
+              (connectionTest.isPending && connectionTest.variables === repo.id) ||
+              (unlink.isPending && unlink.variables === repo.id)
+            }
           />
         ))}
       </div>
@@ -220,10 +272,18 @@ function RepositoryRow({
   repo,
   index,
   onAssign,
+  onLink,
+  onTest,
+  onUnlink,
+  pending,
 }: {
   repo: RepositorySummary;
   index: number;
   onAssign: () => void;
+  onLink: () => void;
+  onTest: () => void;
+  onUnlink: () => void;
+  pending: boolean;
 }) {
   return (
     <article className="instrument-panel group relative overflow-hidden rounded-[0.7rem] transition-colors hover:border-muted-foreground/35">
@@ -274,8 +334,17 @@ function RepositoryRow({
         <div className="flex flex-wrap items-center justify-between gap-3 lg:justify-end">
           {repo.assigned_login ? (
             <div className="text-left lg:text-right">
-              <p className="data-label">LOCKED IDENTITY</p>
-              <p className="mt-1 text-sm font-semibold text-success">@{repo.assigned_login}</p>
+              <p className="data-label">
+                {repo.routing_configured ? "ROUTE ACTIVE" : "IDENTITY ONLY"}
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-sm font-semibold",
+                  repo.routing_configured ? "text-success" : "text-warning",
+                )}
+              >
+                @{repo.assigned_login}
+              </p>
             </div>
           ) : (
             <div className="text-left lg:text-right">
@@ -283,11 +352,44 @@ function RepositoryRow({
               <p className="mt-1 text-sm font-semibold text-warning">Unassigned</p>
             </div>
           )}
-          <Button variant={repo.assigned_login ? "outline" : "default"} onClick={onAssign}>
-            <KeyRound aria-hidden />
-            {repo.assigned_login ? "Edit assignment" : "Assign identity"}
-            <ArrowRight aria-hidden />
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {repo.assigned_login &&
+              repo.remote_protocol === "https" &&
+              (!repo.routing_configured ? (
+                <Button size="sm" onClick={onLink} disabled={pending}>
+                  {pending ? (
+                    <Loader2 className="animate-spin" aria-hidden />
+                  ) : (
+                    <PlugZap aria-hidden />
+                  )}
+                  Enable route
+                </Button>
+              ) : (
+                <>
+                  <Button size="sm" variant="outline" onClick={onTest} disabled={pending}>
+                    {pending ? (
+                      <Loader2 className="animate-spin" aria-hidden />
+                    ) : (
+                      <ShieldCheck aria-hidden />
+                    )}
+                    Verify
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={onUnlink} disabled={pending}>
+                    <Unplug aria-hidden /> Unlink
+                  </Button>
+                </>
+              ))}
+            <Button
+              size="sm"
+              variant={repo.assigned_login ? "outline" : "default"}
+              onClick={onAssign}
+              disabled={pending}
+            >
+              <KeyRound aria-hidden />
+              {repo.assigned_login ? "Edit" : "Assign identity"}
+              {!repo.assigned_login && <ArrowRight aria-hidden />}
+            </Button>
+          </div>
         </div>
       </div>
     </article>

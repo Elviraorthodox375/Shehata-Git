@@ -29,6 +29,7 @@ pub struct RepositorySummary {
     pub commit_name: Option<String>,
     pub commit_email: Option<String>,
     pub push_policy: String,
+    pub routing_configured: bool,
 }
 
 pub async fn discover_selected_repository(path: &str) -> Result<DiscoveredRepository> {
@@ -94,6 +95,29 @@ pub fn list_repository_summaries(db: &Database) -> Result<Vec<RepositorySummary>
         .collect()
 }
 
+pub async fn list_repository_summaries_with_routing() -> Result<Vec<RepositorySummary>> {
+    let db = Database::open_default()?;
+    let mut repositories = list_repository_summaries(&db)?;
+    drop(db);
+    let git = GitRunner::locate()?;
+    for repository in &mut repositories {
+        let path = std::path::Path::new(&repository.canonical_path);
+        let helpers = shehata_git::read_local_config_values(&git, path, "credential.helper")
+            .await
+            .unwrap_or_default();
+        let use_http_path =
+            shehata_git::read_local_config_values(&git, path, "credential.useHttpPath")
+                .await
+                .unwrap_or_default();
+        repository.routing_configured = helpers.first().is_some_and(String::is_empty)
+            && helpers
+                .iter()
+                .any(|helper| helper.contains(&format!("--repo-id {}", repository.id)))
+            && use_http_path.iter().any(|value| value == "true");
+    }
+    Ok(repositories)
+}
+
 pub fn repository_summary(db: &Database, repo: RepositoryRecord) -> Result<RepositorySummary> {
     let assigned_login = repo
         .assigned_account_id
@@ -123,6 +147,7 @@ pub fn repository_summary(db: &Database, repo: RepositoryRecord) -> Result<Repos
         commit_name: repo.commit_name,
         commit_email: repo.commit_email,
         push_policy: repo.push_policy,
+        routing_configured: false,
     })
 }
 

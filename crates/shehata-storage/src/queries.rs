@@ -299,6 +299,14 @@ pub fn update_repository_assignment_and_identity(
     Ok(())
 }
 
+pub fn clear_repository_assignment(db: &Database, repository_id: &str) -> Result<(), StorageError> {
+    db.connection().execute(
+        "UPDATE repositories SET assigned_account_id = NULL, updated_at = ?1 WHERE id = ?2",
+        params![now(), repository_id],
+    )?;
+    Ok(())
+}
+
 pub fn delete_repository(db: &Database, id: &str) -> Result<(), StorageError> {
     db.connection()
         .execute("DELETE FROM repositories WHERE id = ?1", params![id])?;

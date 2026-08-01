@@ -301,12 +301,12 @@ pub async fn read_local_config_values(
     if !output.success() {
         return Ok(Vec::new());
     }
+    // Empty `credential.helper` values are meaningful: they reset helpers
+    // inherited from broader Git config scopes. Preserve them exactly.
     Ok(output
         .stdout
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
+        .split_terminator('\n')
+        .map(|line| line.trim_end_matches('\r').to_string())
         .collect())
 }
 

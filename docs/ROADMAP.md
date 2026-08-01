@@ -44,10 +44,12 @@
 - ✅ Desktop review-and-confirm assignment dialog.
 - Real two-account/repository acceptance remains pending owner authentication.
 
-## Phase 6 — Credential routing vertical slice ⬜
+## Phase 6 — Credential routing vertical slice 🚧
 
-- Helper configured per repo, `git credential fill` + `ls-remote` green,
-  external push uses assigned account, unlink restores config.
+- ✅ Helper configured per repo with exact backup, verification, and rollback.
+- ✅ Real `git credential fill` integration test through the built helper and assigned account mapping.
+- ✅ Desktop Enable route, Verify (`git ls-remote`), and confirmed Unlink/Restore controls.
+- Real owner `ls-remote`, external push, and two-account acceptance remain pending authentication.
 - **First true product milestone.**
 
 ## Phase 7 — Safe Git actions ⬜

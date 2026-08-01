@@ -14,12 +14,14 @@ Each linked repository gets **local** Git config (never global):
 
 ```text
 credential.helper = ""                                   (reset inherited helpers)
-credential.helper = "shehata --repo-id <uuid>"           (our helper)
+credential.helper = "!'<absolute-helper-path>' --repo-id <uuid>"   (our helper)
 credential.useHttpPath = true
 ```
 
-Git resolves `shehata` to the `git-credential-shehata` executable on PATH.
-The helper reads the repository UUID from its arguments, looks up the assigned
+The fixed absolute command avoids PATH ambiguity and works for Windows install
+paths containing spaces. The `!` form prevents Git for Windows from rewriting
+an absolute drive path as `git-credential-<path>`. The helper reads the
+repository UUID from its arguments, looks up the assigned
 account in SQLite, fetches a short-lived token via
 `gh auth token --hostname <host> --user <login>`, and emits it over the Git
 credential protocol.
@@ -38,6 +40,7 @@ credential protocol.
 
 - Works identically for terminal pushes, IDE pushes, and AI coding agents,
   because they all go through Git's standard credential resolution.
-- The helper binary must be on PATH (installer adds install dir to **user** PATH).
+- The desktop resolves the helper beside the app (with PATH as a fallback);
+  the installer still adds the install directory to **user** PATH for direct use.
 - Argument-order behavior of Git credential helpers is verified by integration
   tests against the installed Git version — never assumed.

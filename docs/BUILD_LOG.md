@@ -5,6 +5,27 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 6 credential routing vertical slice
+
+### Repository-scoped credential routing
+
+- Added the shared Phase 6 routing service for enable, connection test, and unlink/restore operations.
+- Routing writes only repository-local Git configuration: an empty helper reset, the fixed Shehata helper command with repository UUID, and `credential.useHttpPath=true`.
+- Preserves empty and multi-valued Git configuration exactly, backs up original values before mutation, verifies applied values, and restores them on failure or unlink.
+- Uses the absolute helper path safely on Windows, including install paths containing spaces and extended `\\?\` paths.
+- Connection testing runs non-interactive `git ls-remote <remote> HEAD` and records only safe audit metadata.
+- Unlink restores credential configuration, removes only a matching repository marker, clears the account mapping, and optionally restores or preserves local commit identity.
+
+### End-to-end helper proof and desktop controls
+
+- Added a real Git integration test that configures the built helper, runs `git credential fill`, resolves the repository assignment from SQLite, calls a fake `gh` executable with the exact host/login arguments, and receives the expected credential output.
+- The integration test covers a repository and application path containing spaces and caught/fixed a Windows helper-command rewriting bug.
+- Repository rows now show actual routing state read from local Git config and expose Enable route, Verify, and confirmed Unlink controls.
+- No real GitHub token was used, persisted, logged, or sent to the frontend. Real owner `ls-remote` and external-push acceptance remain pending authenticated accounts.
+- Final repository gate passed: workspace formatting, clippy with warnings denied, all 53 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+
+---
+
 ## 2026-08-01 — Phase 5 assignment foundation and professional UI refresh
 
 ### Repository assignment and local identity

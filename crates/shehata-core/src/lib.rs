@@ -10,6 +10,7 @@ pub mod error;
 pub mod models;
 pub mod redact;
 pub mod repositories;
+pub mod routing;
 
 pub use doctor::{Doctor, APP_VERSION};
 pub use error::{Result, ShehataError};

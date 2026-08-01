@@ -7,7 +7,7 @@
 use serde::Serialize;
 use shehata_core::{
     accounts as core_accounts, assignment as core_assignment, repositories as core_repositories,
-    Doctor,
+    routing as core_routing, Doctor,
 };
 use shehata_github::{GhLoginEvent, GhRunner};
 use shehata_storage::{queries, Database};
@@ -66,9 +66,9 @@ async fn accounts_add(
 }
 
 #[tauri::command]
-fn repositories_list() -> Result<Vec<core_repositories::RepositorySummary>, String> {
-    let db = open_db()?;
-    core_repositories::list_repository_summaries(&db)
+async fn repositories_list() -> Result<Vec<core_repositories::RepositorySummary>, String> {
+    core_repositories::list_repository_summaries_with_routing()
+        .await
         .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
 }
 
@@ -89,6 +89,33 @@ async fn repositories_assign(
     request: core_assignment::AssignRepositoryRequest,
 ) -> Result<core_assignment::AssignmentResult, String> {
     core_assignment::assign_repository(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_link(
+    request: core_routing::LinkRepositoryRequest,
+) -> Result<core_routing::RoutingResult, String> {
+    core_routing::link_repository(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_test(
+    repository_id: String,
+) -> Result<core_routing::ConnectionTestResult, String> {
+    core_routing::test_connection(&repository_id)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
+async fn repositories_unlink(
+    request: core_routing::UnlinkRepositoryRequest,
+) -> Result<core_routing::UnlinkResult, String> {
+    core_routing::unlink_repository(request)
         .await
         .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
 }
@@ -144,6 +171,9 @@ pub fn run() {
             repositories_list,
             repositories_add,
             repositories_assign,
+            repositories_link,
+            repositories_test,
+            repositories_unlink,
             audit_list,
             mcp_info,
         ])
