@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <sub>Windows 10/11 · macOS (Apple Silicon) · MIT licensed · no account required to try</sub>
+  <sub>Windows 10/11 · macOS (Apple Silicon) · MIT licensed · no cloud account or subscription</sub>
 </p>
 
 <p align="center">
@@ -59,7 +59,7 @@ when the assigned account is unavailable.
 
 ## Screenshots
 
-Local paths and account names belonging to private work are blurred.
+Local paths, private account names, and the build version are blurred.
 
 | Accounts | Repository routing | Agent bridge |
 |---|---|---|
