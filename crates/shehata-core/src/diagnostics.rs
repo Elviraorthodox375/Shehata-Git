@@ -14,6 +14,25 @@ pub struct DiagnosticCheck {
     pub version: Option<String>,
 }
 
+/// Availability-only view used by the copyable support report. Executable
+/// paths are intentionally excluded because they commonly contain usernames.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiagnosticAiClient {
+    pub id: String,
+    pub name: String,
+    pub available: bool,
+}
+
+impl From<AiClientInfo> for DiagnosticAiClient {
+    fn from(client: AiClientInfo) -> Self {
+        Self {
+            id: client.id,
+            name: client.name,
+            available: client.available,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SafeDiagnosticReport {
     pub generated_at: String,
@@ -24,7 +43,7 @@ pub struct SafeDiagnosticReport {
     pub repository_count: usize,
     pub assigned_repository_count: usize,
     pub routed_repository_count: usize,
-    pub ai_clients: Vec<AiClientInfo>,
+    pub ai_clients: Vec<DiagnosticAiClient>,
 }
 
 pub async fn safe_diagnostic_report() -> Result<SafeDiagnosticReport> {
@@ -60,6 +79,25 @@ pub async fn safe_diagnostic_report() -> Result<SafeDiagnosticReport> {
             .iter()
             .filter(|repository| repository.routing_configured)
             .count(),
-        ai_clients: detect_ai_clients(),
+        ai_clients: detect_ai_clients().into_iter().map(Into::into).collect(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn support_client_metadata_omits_executable_paths() {
+        let safe = DiagnosticAiClient::from(AiClientInfo {
+            id: "codex".to_string(),
+            name: "Codex".to_string(),
+            available: true,
+            executable_path: Some(r"C:\Users\private-name\bin\codex.exe".to_string()),
+        });
+        let serialized = serde_json::to_string(&safe).unwrap();
+
+        assert!(!serialized.contains("private-name"));
+        assert!(!serialized.contains("executable_path"));
+    }
 }

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+  ArrowRightLeft,
   CheckCircle2,
   Copy,
   ExternalLink,
@@ -20,7 +21,13 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SearchField } from "@/components/ui/SearchField";
-import { addAccount, cancelAccountLogin, listAccounts, removeAccount } from "@/lib/tauri";
+import {
+  addAccount,
+  cancelAccountLogin,
+  listAccounts,
+  removeAccount,
+  switchAccount,
+} from "@/lib/tauri";
 import type { GhAccount, GhLoginEvent } from "@/lib/types";
 
 /**
@@ -33,6 +40,7 @@ export function AccountsPage() {
   const [loginEvent, setLoginEvent] = useState<GhLoginEvent | null>(null);
   const [search, setSearch] = useState("");
   const [accountToRemove, setAccountToRemove] = useState<GhAccount | null>(null);
+  const [accountToActivate, setAccountToActivate] = useState<GhAccount | null>(null);
   const [cancelingLogin, setCancelingLogin] = useState(false);
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
   const filteredAccounts = useMemo(() => {
@@ -59,6 +67,13 @@ export function AccountsPage() {
         queryClient.invalidateQueries({ queryKey: ["doctor"] }),
         queryClient.invalidateQueries({ queryKey: ["repositories"] }),
       ]);
+    },
+  });
+  const activate = useMutation({
+    mutationFn: (account: GhAccount) => switchAccount(account),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["accounts"], data);
+      setAccountToActivate(null);
     },
   });
 
@@ -161,6 +176,20 @@ export function AccountsPage() {
         </Card>
       )}
 
+      {activate.isError && (
+        <Card className="border-destructive/40 bg-destructive/[0.04]">
+          <CardContent className="flex items-start gap-3 py-4">
+            <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
+            <div>
+              <p className="text-sm font-semibold text-destructive">
+                Could not change the GitHub CLI default
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{errorMessage(activate.error)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {accounts.data?.length === 0 && (
         <Card className="relative overflow-hidden border-dashed bg-card/45">
           <span className="absolute left-0 top-0 h-5 w-5 border-l border-t border-primary/50" />
@@ -216,12 +245,39 @@ export function AccountsPage() {
                   <p className="mt-0.5 font-mono text-[0.7rem] text-muted-foreground">
                     {account.host}
                   </p>
+                  <p className="mt-1 text-xs text-muted-foreground/75">
+                    {account.active
+                      ? "Default for plain GitHub CLI commands."
+                      : "Ready for repositories routed through Shehata Git."}
+                  </p>
                 </div>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                  {account.active && <Badge variant="secondary">active in gh</Badge>}
+                  {account.active && (
+                    <Badge
+                      variant="secondary"
+                      title="The default account used by plain gh commands"
+                    >
+                      CLI default
+                    </Badge>
+                  )}
                   <Badge variant={account.token_available ? "success" : "warning"}>
-                    {account.token_available ? "token ok" : "token unavailable"}
+                    {account.token_available ? "ready" : "needs sign-in"}
                   </Badge>
+                  {!account.active && account.token_available && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="min-h-11 sm:min-h-9"
+                      onClick={() => {
+                        activate.reset();
+                        setAccountToActivate(account);
+                      }}
+                      disabled={remove.isPending || login.isPending || activate.isPending}
+                    >
+                      <ArrowRightLeft aria-hidden /> Make CLI default
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -231,7 +287,7 @@ export function AccountsPage() {
                       remove.reset();
                       setAccountToRemove(account);
                     }}
-                    disabled={remove.isPending || login.isPending}
+                    disabled={remove.isPending || login.isPending || activate.isPending}
                   >
                     {removing ? (
                       <LoaderCircle className="animate-spin" aria-hidden />
@@ -281,6 +337,28 @@ export function AccountsPage() {
           pending={remove.isPending}
           onCancel={() => setAccountToRemove(null)}
           onConfirm={() => remove.mutate(accountToRemove)}
+        />
+      )}
+
+      {accountToActivate && (
+        <ConfirmDialog
+          eyebrow="GitHub CLI default"
+          title={`Make @${accountToActivate.login} the CLI default?`}
+          description={
+            <>
+              Plain <strong className="text-foreground">gh</strong> commands for{" "}
+              <strong className="text-foreground">{accountToActivate.host}</strong> will use this
+              account by default.
+            </>
+          }
+          detail="Repository assignments in Shehata Git do not change. Each routed repository keeps using its assigned identity."
+          confirmLabel="Make CLI default"
+          cancelLabel="Keep current default"
+          pendingLabel="Switching…"
+          pending={activate.isPending}
+          tone="primary"
+          onCancel={() => setAccountToActivate(null)}
+          onConfirm={() => activate.mutate(accountToActivate)}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-//! Phase 6: repository-scoped HTTPS credential routing.
+//! Repository-scoped HTTPS credential routing.
 //!
 //! Tokens never enter this module. Git invokes `git-credential-shehata`, and
 //! that helper obtains the assigned account's token just in time from `gh`.

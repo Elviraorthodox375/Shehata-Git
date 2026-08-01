@@ -43,6 +43,10 @@ export function removeAccount(account: Pick<GhAccount, "host" | "login">): Promi
   return invoke<GhAccount[]>("accounts_remove", { request: account });
 }
 
+export function switchAccount(account: Pick<GhAccount, "host" | "login">): Promise<GhAccount[]> {
+  return invoke<GhAccount[]>("accounts_switch", { request: account });
+}
+
 export function listRepositories(): Promise<RepositorySummary[]> {
   return invoke<RepositorySummary[]>("repositories_list");
 }
@@ -185,6 +189,12 @@ export interface DiagnosticCheck {
   version: string | null;
 }
 
+export interface DiagnosticAiClient {
+  id: string;
+  name: string;
+  available: boolean;
+}
+
 export interface SafeDiagnosticReport {
   generated_at: string;
   app_version: string;
@@ -194,7 +204,7 @@ export interface SafeDiagnosticReport {
   repository_count: number;
   assigned_repository_count: number;
   routed_repository_count: number;
-  ai_clients: AiClientInfo[];
+  ai_clients: DiagnosticAiClient[];
 }
 
 export interface GenerateAgentsResult {

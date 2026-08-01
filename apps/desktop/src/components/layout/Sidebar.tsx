@@ -1,6 +1,7 @@
 import { Activity, Bot, FolderGit2, Home, Settings, Stethoscope, Users } from "lucide-react";
 import { LogoLockup, LogoMark } from "@/components/Logo";
 import { cn } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/version";
 
 export type PageId =
   | "home"
@@ -112,7 +113,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           <span className="hidden h-1.5 w-1.5 rounded-full bg-warning lg:block" aria-hidden />
         </button>
         <div className="hidden items-center justify-between px-3 pb-1 pt-3 font-mono text-[0.625rem] uppercase tracking-wider text-muted-foreground/55 lg:flex">
-          <span>v0.1.5</span>
+          <span>v{APP_VERSION}</span>
           <span>Local first</span>
         </div>
       </div>

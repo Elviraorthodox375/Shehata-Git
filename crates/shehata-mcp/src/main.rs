@@ -318,7 +318,7 @@ impl ShehataMcp {
 
     #[tool(
         name = "shehata_git_test_connection",
-        description = "Non-mutating connection test through the assigned account [Phase 6]"
+        description = "Non-mutating connection test through the assigned account"
     )]
     async fn test_connection(
         &self,

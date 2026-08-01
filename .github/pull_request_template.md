@@ -8,10 +8,14 @@
 
 ## How was it tested?
 
+- [ ] `pnpm prepare:sidecars` (required once in a clean clone)
+- [ ] `cargo fmt --all -- --check`
 - [ ] `cargo test --workspace`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
+- [ ] `pnpm --filter @shehata/desktop lint`
 - [ ] `pnpm --filter @shehata/desktop typecheck`
 - [ ] `pnpm --filter @shehata/desktop test`
+- [ ] `pnpm --filter @shehata/desktop build`
 - [ ] Manually verified in the app (describe below)
 
 ## Security notes
@@ -26,4 +30,5 @@
 ## Docs
 
 - [ ] Updated docs/BUILD_LOG.md (if behavior/architecture changed)
+- [ ] Updated CHANGELOG.md (if behavior changed for users)
 - [ ] Added ADR in docs/DECISIONS/ (if architectural)

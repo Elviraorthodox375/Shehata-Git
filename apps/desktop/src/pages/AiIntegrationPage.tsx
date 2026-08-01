@@ -271,7 +271,7 @@ function RepositoryPicker({
       {open && (
         <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 overflow-hidden rounded-[0.8rem] border border-white/10 bg-surface-elevated/95 shadow-[0_24px_70px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
           <div className="border-b border-white/10 p-2.5">
-            <label className="glass-input flex min-h-11 items-center gap-2.5 px-3">
+            <label className="glass-input flex min-h-11 items-center gap-2.5 px-3 focus-within:border-primary/45">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               <span className="sr-only">Search repositories</span>
               <input
@@ -279,7 +279,7 @@ function RepositoryPicker({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search repositories…"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/55 [&::-webkit-search-cancel-button]:hidden"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/55 focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-search-cancel-button]:hidden"
               />
               <span className="font-mono text-[0.65rem] text-muted-foreground/60">
                 {filtered.length}/{repositories.length}

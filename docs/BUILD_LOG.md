@@ -1,462 +1,64 @@
-# Shehata Git — Build Log
-
-This log records what was actually done, verified, and found during development.
-Entries are append-only and dated. Nothing is recorded here unless it really happened.
-
----
-
-## 2026-08-01 — v0.1.5 scalable workspace UX and official branding
-
-- Adopted the supplied `Logo Shehata Git.svg` as the single brand source,
-  regenerated Windows and macOS bundle icons, updated in-app branding, and set
-  the live Tauri window icon explicitly so Windows taskbar cache cannot retain
-  the previous mark across an upgrade.
-- Replaced native and in-flow repository/account selectors with searchable
-  Liquid Glass popovers. The menus now float above their forms, remain bounded
-  and scrollable for long lists, and no longer push the next section down.
-- Added search to account and repository panels and made repository cards
-  collapsed by default while preserving direct access to their primary actions.
-- Added explicit **Copied!** feedback every time a one-time GitHub code is
-  copied again. Added a real **Cancel** action that terminates the waiting
-  GitHub CLI child process instead of merely hiding its dialog.
-- Replaced the native Windows account-removal prompt with a branded in-app
-  confirmation dialog.
-- Added user-controlled local audit retention: delete one event or clear the
-  complete redacted history, with an in-app confirmation and shared Rust core
-  validation. Repository, account, commit, and GitHub state are untouched.
-- Renamed the ambiguous **Workspace density** control to **Layout spacing**,
-  clarified both choices, and connected compact mode to real card and page
-  spacing without reducing text size or touch targets.
-- Reduced repeated repository refresh latency by checking independent routing
-  state concurrently with a bounded worker count, and extended React Query
-  cache freshness to avoid needless reloads while navigating between panels.
-- Added regression coverage for cancellable browser login and local audit
-  deletion/clearing. Final quality gate passed: formatting, Clippy with warnings
-  denied, all 80 Rust tests, strict TypeScript, and 3 frontend tests. Biome lint
-  and the production Vite build also passed.
-- Bumped the application and installer version to 0.1.5. Built
-  `target/release/bundle/nsis/Shehata Git_0.1.5_x64-setup.exe` (5,395,384 bytes;
-  SHA-256 `E7479ED8F811E412B77A2907A6A94EEF166ACACDEC57A35758683178AC02ABAB`).
-- Installed the 0.1.5 NSIS bundle over the previous version and verified the
-  uninstall registration, `shehata 0.1.5`, all eight Doctor checks ready, three
-  existing GitHub CLI accounts preserved, and the new icon embedded in the
-  installed desktop executable.
-
----
-
-## 2026-08-01 — v0.1.4 complete account controls
-
-- Added exact-account removal through shared Rust business logic and GitHub
-  CLI's fixed `auth logout --hostname <host> --user <login>` arguments.
-  Validation and the no-console runner remain in force; raw CLI output never
-  reaches the frontend.
-- Account removal signs the selected identity out of GitHub CLI on this PC
-  only. It does not revoke GitHub's OAuth grant, and repository assignments are
-  deliberately retained so they cannot silently fall through to another
-  account.
-- Added a per-account **Remove** action with a native warning confirmation,
-  pending state, safe failure feedback, and fresh Account/System
-  Check/Repository queries after completion.
-- Added Tauri's message-dialog permission required by native confirmations;
-  no additional filesystem, shell, credential, or clipboard-read permission
-  was granted.
-- The app now opens the exact allowlisted GitHub device URL itself as soon as a
-  one-time code arrives, instead of relying on GitHub CLI's failing Windows
-  browser handoff. Manual **Open GitHub again** remains available.
-- Kept the copy action permanently useful: after automatic copying succeeds,
-  the button becomes **Copy again** and can restore an overwritten clipboard
-  at any time while the code is valid.
-- Added a Windows regression test proving logout targets one exact host/login
-  pair without an interactive prompt.
-- Bumped the application and installer version to 0.1.4.
-- Built `target/release/bundle/nsis/Shehata Git_0.1.4_x64-setup.exe`
-  (5,350,985 bytes; SHA-256
-  `AFBB15DA633E2FB84BFE3CB06C67800AD2CBF61EE41858D972D3E64FEF382F51`).
-- Installed the 0.1.4 NSIS bundle over 0.1.3 and verified the uninstall
-  registration, `shehata 0.1.4`, a healthy installed Doctor report with all
-  eight checks ready, and that both existing GitHub CLI accounts remained
-  signed in across the upgrade.
-
----
-
-## 2026-08-01 — v0.1.3 verified one-time-code copying
-
-- Confirmed that GitHub's CLI browser authentication uses the OAuth device
-  flow: GitHub requires the user to enter a short-lived `user_code` and approve
-  access in the browser. This security confirmation cannot be automated away
-  by the desktop app.
-- Removed reliance on GitHub CLI's `--clipboard` side effect after the live UI
-  claimed the code was copied when the Windows clipboard had not changed.
-- Added Tauri's official clipboard manager and granted only
-  `clipboard-manager:allow-write-text`; the app has no clipboard-read
-  permission.
-- The account dialog now copies a received code itself, reports success only
-  after the clipboard write resolves, exposes a prominent manual **Copy code**
-  action, and gives an honest fallback message if automatic copying fails.
-- Clarified the browser instructions: paste the one-time code, approve access,
-  and return while GitHub CLI completes its polling. The official GitHub page
-  remains available as a separate fallback action.
-- Bumped the application and installer version to 0.1.3.
-- Built `target/release/bundle/nsis/Shehata Git_0.1.3_x64-setup.exe`
-  (5,343,303 bytes; SHA-256
-  `EDF0024EF0C8AB356309CC8465E513ADE633330250DF9331B673CADCCC6225BC`).
-- Installed the 0.1.3 NSIS bundle over 0.1.2 and verified the uninstall
-  registration, `shehata 0.1.3`, and a healthy installed Doctor report with
-  all eight checks ready.
-
----
-
-## 2026-08-01 — v0.1.2 silent background commands and sign-in UX repair
-
-- Diagnosed the GitHub account flow from the live failure state: GitHub CLI
-  produced and copied the device code, then waited for an Enter key before
-  opening the browser and beginning its completion polling. The desktop runner
-  had connected standard input to null, leaving the UI waiting indefinitely.
-- Changed browser login to acknowledge GitHub CLI's fixed Enter prompt over a
-  private pipe. Added a Windows regression test whose fake CLI fails on EOF and
-  succeeds only after receiving the input line.
-- Configured every production Git, GitHub CLI, registry-query, and WinGet child
-  process to use Windows `CREATE_NO_WINDOW`. Background checks and repository
-  actions no longer flash Command Prompt or Terminal windows.
-- Reworded the account dialog so it never claims a page already opened while a
-  code is still being prepared. Added a one-click fallback restricted by Tauri
-  capability scope to the exact official GitHub device-login URL.
-- Compressed successful System Check results into a responsive two-column
-  verified grid while preserving full-size repair cards for actual problems.
-- Corrected the PATH health check to test the real requirement—the credential
-  helper is discoverable from the process or persistent user PATH—instead of
-  requiring the currently running executable's directory. Debug builds no
-  longer report a false machine-health failure when an installed helper is
-  already available.
-- Rebuilt repository cards around a clear information row and separate action
-  rail. Long repository names now retain useful width, branch/remote metadata
-  has consistent containers, and mobile actions use 44-pixel touch targets.
-- Bumped the application and installer version to 0.1.2.
-- Built `target/release/bundle/nsis/Shehata Git_0.1.2_x64-setup.exe`
-  (5,196,230 bytes; SHA-256
-  `2E01D6F9714A504BD17AB0248FA464FDCA1074AE86E2042EF99A11DA398496C3`).
-- Final repository gate passed: workspace formatting, Clippy with warnings
-  denied, all 74 Rust tests, strict TypeScript, 3 frontend tests, and Biome
-  lint.
-- Installed the 0.1.2 NSIS bundle over 0.1.1 and verified the uninstall
-  registration, all shipped executables, `shehata 0.1.2`, and a healthy
-  installed Doctor report with all eight checks ready.
-
----
-
-## 2026-08-01 — v0.1.1 automatic Windows setup and installer-state repair
-
-- Diagnosed the owner's misleading PATH warning: an earlier custom-directory
-  installer smoke test remained registered in Windows, so the later normal
-  setup correctly upgraded that registered location and its Start Menu shortcut
-  still targeted the workspace `tmp` directory.
-- Changed the Doctor PATH check to read the current-user registry PATH as well
-  as the process environment. This prevents a false warning when the app is
-  launched immediately after installation before its parent process inherits
-  the broadcast environment update.
-- Added shared-core automatic prerequisite installation with a closed enum and
-  exact fixed WinGet package mappings for `Git.Git` and `GitHub.cli`. The
-  frontend cannot supply commands, package identifiers, or extra arguments.
-- WinGet runs with exact package matching, the `winget` source, silent mode,
-  disabled interactivity, and explicit package/source agreement acceptance.
-  Raw installer output is discarded and never crosses the Tauri boundary.
-- Added a prominent **Set up this PC** action to System Check and first-run
-  onboarding. It explains the download, asks for confirmation, installs only
-  missing tools, refreshes the current process PATH from Windows, invalidates
-  account state, and re-runs Doctor.
-- Verified the live WinGet catalog resolves the reviewed identifiers to Git for
-  Windows 2.55.0.3 and GitHub CLI 2.97.0 on the test machine.
-- Bumped the application and installer version to 0.1.1 so Windows treats this
-  delivery as an explicit update rather than another ambiguous 0.1.0 build.
-- Final repository gate passed: workspace formatting, Clippy with warnings
-  denied, all 74 Rust tests, strict TypeScript, 3 frontend tests, and Biome
-  lint.
-- Built `target/release/bundle/nsis/Shehata Git_0.1.1_x64-setup.exe`
-  (5,190,106 bytes; SHA-256
-  `D435B4491DDE5B1D3644D974CC22D502359194FFBEF88AD1D854D0072E9BA658`).
-- Removed the stale smoke-test installation through its registered uninstaller,
-  corrected NSIS's persisted install-directory value, and installed 0.1.1 to
-  `C:\Users\moham\AppData\Local\Shehata Git`.
-- Verified one 0.1.1 uninstall registration, the Start Menu shortcut, all four
-  shipped executables, one correct PATH entry, absence of the smoke-test
-  directory, `shehata 0.1.1`, and a healthy installed Doctor report with all
-  eight checks ready.
-
----
-
-## 2026-08-01 — Phase 10 product experience and safe repository workspace
-
-- Reworked the desktop visual system into a restrained Liquid Glass workspace
-  with translucent depth, precise highlights, a responsive icon rail, reduced
-  transparency, comfortable/compact density, and dark/light themes.
-- Added a guided Connect repository flow that discovers a worktree, recommends
-  an exact owner-matching account when available, assigns local identity,
-  enables the HTTPS credential route, and verifies it after one confirmation.
-- Added a full repository workspace with changed-file selection, stage/unstage,
-  normal commits, identity and policy context, recent audit events, and a
-  bounded read-only diff viewer.
-- Diff requests are implemented in shared Rust core, accept only validated
-  repository-relative paths, pass paths after Git's option terminator, hide
-  common credential/secret filenames, and truncate previews at 256 KB.
-- Added Smart Sync preview in shared core. It verifies the assigned route,
-  fetches safely, reports exact ahead/behind state, fast-forwards only when
-  behind, confirms normal pushes when ahead, and blocks automatic diverged
-  histories instead of merging or rebasing them.
-- Added fixed-catalog local detection for Codex, Claude Code, Cursor, and VS
-  Code; redesigned Agent Bridge around detected clients and its guarded
-  permission envelope.
-- Rebuilt Activity as a searchable result-filtered audit timeline and added a
-  safe diagnostic JSON report containing versions/readiness/counts only—never
-  logins, repository paths, remotes, tokens, or source contents.
-- Added Rust coverage for safe diff behavior, UTF-8 truncation, credential-name
-  blocking, and the reviewed AI-client catalog.
-- Built and visually inspected the native Windows app across Overview,
-  Repositories, Agent Bridge, Preferences, and Audit Log. No login, repository
-  mutation, or external Git operation was performed during visual QA.
-- Final repository gate passed: workspace formatting, Clippy with warnings
-  denied, all 72 Rust tests, strict TypeScript, 3 frontend tests, and Biome
-  lint.
-- Rebuilt the unsigned Windows x64 NSIS installer at
-  `target/release/bundle/nsis/Shehata Git_0.1.0_x64-setup.exe` (5,169,392
-  bytes; SHA-256
-  `61D6D01FDA60280F0D02DA7695A927BA783606850D96BED353E0E38B942FBAAB`).
-
----
-
-## 2026-08-01 — Phase 10 Windows installer vertical slice
-
-- Added a reproducible sidecar preparation step that release-builds the CLI,
-  credential helper, and MCP server, names them with the native Rust target
-  triple, and places them where Tauri verifies them for bundling.
-- Configured the NSIS bundle to ship `shehata-git.exe`, `shehata.exe`,
-  `git-credential-shehata.exe`, and `shehata-mcp.exe` together.
-- Added installer-only current-user PATH maintenance through the native CLI.
-  It preserves the existing registry value type and contents, rejects invalid
-  paths, avoids duplicates case-insensitively, and broadcasts the Windows
-  environment-change notification.
-- Added NSIS post-install and pre-uninstall hooks so terminals and Git can find
-  the packaged commands without administrator privileges.
-- Added unit coverage for idempotent PATH insertion and exact removal while
-  preserving unrelated entries.
-- Built the real unsigned Windows x64 NSIS installer at
-  `target/release/bundle/nsis/Shehata Git_0.1.0_x64-setup.exe`.
-- Inspected the generated NSIS script and confirmed that all three external
-  binaries are copied on install and removed on uninstall.
-- Ran a real silent smoke test into a workspace-bounded temporary directory:
-  all four executables and the uninstaller were present, the installed CLI
-  reported `shehata 0.1.0`, the directory appeared in user PATH, uninstall
-  removed it, the exact original PATH was restored, and the install directory
-  was removed.
-- The installer is intentionally unsigned. Code signing, hosted draft-release
-  execution, accessibility review, and owner two-account acceptance remain.
-- Final repository gate passed: workspace formatting, clippy with warnings
-  denied, all 69 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-
----
-
-## 2026-08-01 — Phase 9 safe native MCP surface
-
-- Replaced every MCP milestone placeholder with shared-core implementations for status, diff counts, identity, connection test, explicit-path commit, pull `--ff-only`, and normal push.
-- MCP commit stages only explicit repository-relative paths. It never exposes arbitrary shell, force push, remote deletion, amend, rebase, hard reset, or clean.
-- MCP push always identifies its caller as AI and always passes `approved=false`; `ask_before_push` returns `approval_required`, while `block_ai_push` returns `operation_blocked`.
-- Repository arguments use strict schemas and require exactly one UUID or path. Domain failures return the stable `{ ok, code, summary, data }` envelope.
-- Diff summary returns counts only and never returns file contents. Tokens remain inside the credential helper/GitHub CLI path and never enter tool results.
-- Added a process-level MCP protocol contract test that initializes the real stdio server, lists exactly the reviewed 11-tool surface, rejects force/shell/reset/delete tool exposure, invokes a tool, and validates its structured credential-free error envelope.
-- Added recoverable bounded AGENTS.md generation that preserves existing project instructions, updates only the marked Shehata Git block, rejects malformed/duplicate markers, and keeps a temporary rollback file until replacement succeeds.
-- Added the desktop repository selector and Generate AGENTS.md control; the existing page continues to show the exact MCP executable and copyable client configuration.
-- External MCP Inspector/client acceptance remains pending the packaged binaries.
-- Final repository gate passed: workspace formatting, clippy with warnings denied, all 67 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-
----
-
-## 2026-08-01 — Phase 8 native CLI commands
-
-- Replaced CLI milestone placeholders with commands that call the same shared Rust core as the desktop.
-- Implemented accounts list/refresh; repositories list/add/show/assign-and-route/unlink-and-restore; status; non-mutating connection test; normal push with preflight; and fixed native MCP launcher.
-- Repository references accept a stable UUID, repository root, any nested path inside a registered worktree, or the current directory where documented.
-- Added human-readable output and global `--json` output with stable error codes. Human output escapes terminal control characters; neither mode outputs tokens.
-- Added `push --yes` for explicit approval-policy acknowledgement. No force, force-with-lease, arbitrary command, amend, rebase, destructive reset, or remote-deletion option exists.
-- The CLI locates `shehata-mcp` only beside itself or on PATH and launches that fixed executable with inherited stdio.
-- Added CLI schema and process-level contract tests covering command shape, absence of force options, structured JSON errors, and credential-output guards.
-- Built and manually verified `shehata --help`, `shehata repos --help`, and `shehata --json repos list`.
-- Installer/PATH delivery remains in Phase 10.
-- Final repository gate passed: workspace formatting, clippy with warnings denied, all 64 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-
----
-
-## 2026-08-01 — Phase 7 safe local Git actions foundation
-
-- Added shared status, selected-path stage/unstage, and normal commit services in Rust core.
-- Dynamic paths are bounded, must remain repository-relative, cannot target `.git`, and are always passed after Git's `--` option terminator without a shell.
-- Unstage works safely both with an existing HEAD (`git restore --staged`) and on an unborn branch (`git rm --cached`), without changing worktree files.
-- Commit rejects empty staged sets and unresolved conflicts, never exposes amend, and records safe success/failure audit events.
-- Added a real temporary-repository test covering status, first-commit stage/unstage, normal commit, and clean post-commit status.
-- Added a professional Changes dialog to repository rows with file-state selection, Stage selected, Unstage selected, and commit-message controls.
-- Added pull using fixed `--ff-only` arguments and normal push using an explicit existing upstream destination; force, force-with-lease, deletion, amend, rebase, hard reset, and arbitrary commands are not exposed.
-- Push preflight verifies the exact installed helper configuration, assigned account token availability, HTTPS host/owner/repository match, branch/ref safety, attached HEAD, conflicts, upstream, freshly fetched ahead/behind state, non-fast-forward risk, and repository policy.
-- Added safe audit records for preflight, pull, push, policy changes, successes, failures, and blocks without storing command output or credentials.
-- Added repository policies for allow normal push, require approval, and block AI push, with a validated selector in the Changes dialog.
-- Added a real two-worktree/local-bare-remote test proving fast-forward-only pull and normal push behavior with the fixed production command builders.
-- Rejected unencrypted HTTP remote URLs; automatic credential routing remains HTTPS-only.
-- Built and visually inspected the native debug app and Repositories page. The Changes dialog was not opened because the owner's app database has no authenticated account/repository, and visual QA did not create fake persistent user data.
-- Real GitHub pull/push acceptance through the owner's two authenticated accounts remains pending.
-- Final repository gate passed: workspace formatting, clippy with warnings denied, all 60 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-
----
-
-## 2026-08-01 — Phase 6 credential routing vertical slice
-
-### Repository-scoped credential routing
-
-- Added the shared Phase 6 routing service for enable, connection test, and unlink/restore operations.
-- Routing writes only repository-local Git configuration: an empty helper reset, the fixed Shehata helper command with repository UUID, and `credential.useHttpPath=true`.
-- Preserves empty and multi-valued Git configuration exactly, backs up original values before mutation, verifies applied values, and restores them on failure or unlink.
-- Uses the absolute helper path safely on Windows, including install paths containing spaces and extended `\\?\` paths.
-- Connection testing runs non-interactive `git ls-remote <remote> HEAD` and records only safe audit metadata.
-- Unlink restores credential configuration, removes only a matching repository marker, clears the account mapping, and optionally restores or preserves local commit identity.
-
-### End-to-end helper proof and desktop controls
-
-- Added a real Git integration test that configures the built helper, runs `git credential fill`, resolves the repository assignment from SQLite, calls a fake `gh` executable with the exact host/login arguments, and receives the expected credential output.
-- The integration test covers a repository and application path containing spaces and caught/fixed a Windows helper-command rewriting bug.
-- Repository rows now show actual routing state read from local Git config and expose Enable route, Verify, and confirmed Unlink controls.
-- No real GitHub token was used, persisted, logged, or sent to the frontend. Real owner `ls-remote` and external-push acceptance remain pending authenticated accounts.
-- Final repository gate passed: workspace formatting, clippy with warnings denied, all 53 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-
----
-
-## 2026-08-01 — Phase 5 assignment foundation and professional UI refresh
-
-### Repository assignment and local identity
-
-- Added a shared Phase 5 assignment service used by the desktop bridge.
-- Assignment resolves an exact `host + login` from the safe account mirror and refuses unavailable accounts or host mismatches.
-- Creates `<git-dir>/shehata-git/repository-id` without overwriting a conflicting marker.
-- Supports optional repository-local `user.name` and `user.email` changes only; input is trimmed, bounded, and rejects control characters or malformed email addresses.
-- Saves the original local identity values before the first change and preserves those backups across later reassignments.
-- Rolls back identity changes and a newly created marker when a later assignment step fails.
-- Added a real temporary-Git-repository test proving account assignment, marker creation, local identity changes, database persistence, and backup contents.
-
-### Desktop assignment flow
-
-- Added the Tauri assignment command and typed frontend bridge.
-- Repository rows now expose Assign identity / Edit assignment.
-- Added a confirmation dialog that filters accounts by token availability and remote host, shows SSH routing limitations, and makes local-only identity behavior explicit.
-- Successful assignment refreshes the repository route in the UI without exposing credentials.
-
-### Visual redesign
-
-- Reworked the application into a precision desktop-tool aesthetic instead of a generic card dashboard.
-- Added a structured workspace sidebar, local/security status header, technical typography, subtle grid canvas, compact status rails, and shared instrument-panel styling.
-- Redesigned onboarding, Overview, Identities, and Repositories with consistent registry language and responsive layouts.
-- Kept motion restrained and respects the existing reduced-motion rule.
-- Visually verified the rebuilt native app across Overview, Repositories, and Identities. No browser authentication or user-repository assignment was triggered during visual QA.
-- Native debug build completed with `--no-bundle`; no installer was generated.
-- Final repository gate passed: workspace formatting, clippy with warnings denied, all 51 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-
----
-
-## 2026-08-01 — Phase 4 repository discovery and native folder picker
-
-### Repository discovery
-
-- Added read-only repository discovery to `shehata-git` using only argument-array Git commands.
-- Canonicalizes the selected folder and validates that it is a Git worktree.
-- Reads the top-level worktree path, Git directory, common Git directory, branch or detached state, HEAD, upstream, remotes, ahead/behind counts, working-tree summary, local commit identity, and existing local credential settings.
-- Parses HTTPS and SSH GitHub remotes without changing them. Unsupported/local remotes remain visible without being misidentified as GitHub.
-- Added temporary-repository tests for valid worktrees, non-repository folders, status parsing, and primary-remote selection.
-
-### Persistence and desktop flow
-
-- Added shared core orchestration that persists discovered metadata in SQLite without holding a database connection across an await point.
-- Re-adding a known canonical path refreshes discovery metadata while preserving its stable id, assigned account, push policy, and creation time.
-- Added a Tauri command and native Windows folder picker capability for selecting one repository folder.
-- Replaced the disabled placeholder with a functional Add repository flow and repository cards showing branch, remote protocol, GitHub path, and assignment state.
-- No repository Git configuration, remote, credentials, or global settings are changed during discovery.
-
-### Verification
-
-- Targeted Rust tests passed for `shehata-git`, `shehata-storage`, `shehata-core`, and the desktop bridge.
-- Final repository gate passed: workspace formatting, clippy with warnings denied, all 49 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-- Frontend strict typecheck, tests, Biome lint, and production Vite build passed.
-- Native Tauri debug application built successfully with `--no-bundle`; no installer was generated.
-- Visually verified the Repositories page and confirmed Add repository opens the native Windows folder picker. The picker was cancelled, so no user repository was saved during UI verification.
-
----
-
-## 2026-08-01 — Recovery audit, Phase 1/2 verification, and Phase 3 browser login
-
-### Recovered state
-
-- Read the original 37 KB build prompt and audited the repository left by the previous agent.
-- Confirmed the repository still has no commits and all project files are untracked.
-- Confirmed there was no `HANDOFF.md`; the previous build log only described Phase 0 even though later-phase code existed.
-- The Shehata Git MCP repository tools requested by `AGENTS.md` were not available in the Codex session. Git inspection was read-only; no commit, push, remote, credential, or global Git configuration change was made.
-
-### Baseline fixes
-
-- Migrated `biome.json` to the installed Biome 2.5.6 schema, restored the intended source-file scope, enabled Tailwind directive parsing, and fixed frontend accessibility lint errors.
-- Applied Rust formatting and fixed all workspace clippy/build failures found in storage, core error serialization, Tauri configuration, account discovery, and the early MCP server.
-- Moved NSIS settings to `bundle.windows.nsis`, matching the current Tauri 2 configuration schema.
-- Refactored async GitHub account discovery so a non-`Sync` rusqlite connection is never held across an await point.
-- Enabled rmcp's `transport-io` feature and made MCP structured envelopes compatible with rmcp 3.1 output schemas.
-- Made writable `Database::open_at` create missing parent directories; added a regression test. The first real Doctor run had exposed this first-launch failure.
-- Removed a Doctor repair hint that referenced an unimplemented `--fix-path` command.
-
-### Phase 1 and Phase 2 verification
-
-- Built the production frontend and a native Tauri debug application.
-- Launched `target/debug/shehata-git.exe` and visually verified the branded Welcome screen.
-- Navigated to the live System Check screen and verified that it rendered real machine results.
-- Current real Doctor results: Git, GitHub CLI, SQLite, credential helper, WebView2, and MCP server are ready. GitHub accounts and the development binary PATH require attention, as expected.
-- Found and documented a build-order pitfall: a later plain `cargo build --workspace` can overwrite the Tauri-produced debug executable with a development binary that expects `localhost:1420`. A Tauri build must be the final application build before visual/manual testing.
-
-### Phase 3 browser login
-
-- Added a safe GitHub CLI browser-login runner using the fixed command: `gh auth login --hostname github.com --git-protocol https --web --clipboard`.
-- Added Tauri Channel progress events for started, waiting-for-browser, and validated one-time device-code states.
-- Raw stdout/stderr is never sent to the frontend; tokens are never requested by the login flow.
-- Added a responsive, keyboard-accessible Add GitHub Account experience with progress, one-time-code, success, and failure states.
-- Added a Windows fake-`gh` regression test proving that only curated events leave the runner and raw diagnostics do not.
-- Real account authentication was intentionally not performed; it requires the owner to complete GitHub's browser flow.
-
-### Verified checks during recovery
-
-- `cargo clippy --workspace --all-targets -- -D warnings` passed after fixes.
-- `cargo test --workspace` passed with 40 Rust tests before the Phase 3 additions.
-- `cargo test -p shehata-storage` passed with 10 tests after the missing-parent regression test.
-- `cargo test -p shehata-github` passed with 7 tests after the browser-login fake-`gh` test.
-- Frontend lint, strict typecheck, tests (3), and production Vite build passed.
-- Native Tauri debug build completed and produced `target/debug/shehata-git.exe`.
-- Final post-Phase-3 quality gate passed: formatting, workspace clippy with warnings denied, 43 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
-- Rebuilt the Tauri application after the final Cargo command and visually verified the new Accounts page and both Add GitHub Account entry points. Real browser authentication was not started.
-
----
-
-## 2026-07-31 — Phase 0: Environment inspection
-
-### Machine
-
-- OS: Windows 11 (build 26200), x64
-- Shell used for build: Git Bash
-- Working directory: `D:\Pormpt Marketing Agency\Shehata Git` (was empty, now the repo root)
-
-### Toolchain status
-
-| Tool | Status | Version / Action |
-|---|---|---|
-| Git | ✅ present | 2.55.0.windows.3 |
-| Node.js | ✅ present | v24.12.0 |
-| pnpm | ✅ present | 9.15.9 |
-| WebView2 Runtime | ✅ present | 150.0.4078.105 |
-| GitHub CLI (`gh`) | ✅ installed during Phase 0 | 2.97.0 via `winget install GitHub.cli` (owner approved) |
-| Rust (rustup) | ✅ installed during Phase 0 | rustup 1.29.0, cargo/rustc 1.97.1 via `winget install Rustlang.Rustup` (owner approved) |
-| MSVC C++ Build Tools | ⏳ installing in background | VS 2022 Build Tools + VCTools workload + Windows 11 SDK 22621 via winget (owner approved). Required for linking Rust MSVC binaries and Tauri builds |
-
-### Notes
-
-- `gh auth status` not yet run — no GitHub accounts configured on this machine yet. Owner will authenticate in Phase 3 via browser login from inside the app.
-- No global Git configuration has been modified.
-- Nothing has been pushed to any remote.
-
----
+# Build log
+
+This file records verified engineering milestones without machine-specific
+paths, account names, repository names, credentials, or private test data.
+
+## 2026-08-01 — Public repository preparation
+
+- Reworked the README, roadmap, contribution guide, security policy, changelog,
+  community templates, and CI workflow for an open-source release.
+- Removed stale internal handoff material and sanitized historical build notes.
+- Added branded screenshot placeholders so real screenshots can be reviewed for
+  personal data before publication.
+- Clarified GitHub CLI default-account behavior in the UI and CLI.
+- Added an explicit, confirmed default-account switch that never changes
+  repository assignments.
+- Refined search focus styling across account, repository, picker, and activity
+  surfaces.
+- Removed executable paths from the copyable diagnostic report and added a
+  regression test for that privacy boundary.
+- Fixed clean-checkout CI ordering so Tauri sidecars are built before Rust
+  workspace validation.
+- Verified a dependency-free working-tree copy: frozen pnpm install, sidecar
+  release build, frontend lint/typecheck/tests/production build, Rust format,
+  Clippy with warnings denied, and all workspace tests passed.
+- Built the current Windows NSIS installer locally after the public-release
+  changes. The unsigned artifact remains local and unpublished.
+
+## 2026-08-01 — v0.1.6 Smart Sync workspace polish
+
+- Replaced silent disabled sync controls with a remote, identity, and route
+  readiness checklist plus a direct setup action.
+- Consolidated Smart Sync to one primary action and replaced its native push
+  prompt with the shared Liquid Glass confirmation dialog.
+- Added working-tree search, staged/changed/untracked filters, visible-file
+  selection, and human-readable Windows paths.
+- Replaced the remaining native confirmation prompts for setup, unlink, and
+  normal push with consistent in-app dialogs.
+- Added unit coverage for workspace filtering and Windows path display.
+- Passed the full Rust and frontend quality gate, built the Windows NSIS
+  installer, installed v0.1.6, and verified the installed sidebar version,
+  repository workspace, Smart Sync readiness guard, search/filter controls,
+  and in-app default-account confirmation flow.
+
+## 2026-08-01 — v0.1.5 desktop workflow refinement
+
+- Adopted the official Shehata Git logo across in-app and bundle assets.
+- Added scalable searchable selectors, list search, and collapsed repository
+  cards.
+- Added real browser-login cancellation and repeat-copy confirmation.
+- Added local audit-event deletion and full history clearing.
+- Reduced repeated UI fetching and parallelized independent repository route
+  checks with a bounded concurrency limit.
+- Built and smoke-tested the Windows NSIS installer locally. No artifact was
+  published.
+
+## 2026-07-31 — Initial product foundation
+
+- Created the Tauri/React desktop, shared Rust core, storage, Git/GitHub runners,
+  CLI, credential helper, and MCP server.
+- Implemented system diagnostics, account discovery, repository registration,
+  identity assignment, credential routing, safe Git actions, audit events, and
+  configuration backup/restore.
+- Added unit, integration, protocol-contract, and security guard tests using
+  temporary repositories and fake binaries.

@@ -5,64 +5,70 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
 
 jobs:
-  test:
+  quality:
+    name: Windows quality gate
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+    timeout-minutes: 45
 
-      - name: Install Node LTS
-        uses: actions/setup-node@v4
+    steps:
+      - name: Check out source without persisted credentials
+        uses: actions/checkout@v6
         with:
-          node-version: lts/*
+          persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        uses: pnpm/action-setup@v6
 
-      - name: Install Rust stable
+      - name: Install Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ~/.pnpm-store
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-pnpm-
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # Tauri validates every configured external binary while compiling the
+      # desktop crate. Build the real sidecars in a clean checkout first.
+      - name: Prepare Tauri sidecars
+        run: pnpm prepare:sidecars
+
+      # Tauri embeds frontendDist while compiling the desktop crate, so build
+      # the web assets before the Rust workspace in a clean checkout.
       - name: Frontend lint
         run: pnpm --filter @shehata/desktop lint
 
-      - name: Frontend typecheck
+      - name: Frontend type check
         run: pnpm --filter @shehata/desktop typecheck
 
       - name: Frontend tests
         run: pnpm --filter @shehata/desktop test
 
-      - name: cargo fmt --check
+      - name: Frontend production build
+        run: pnpm --filter @shehata/desktop build
+
+      - name: Rust formatting
         run: cargo fmt --all -- --check
 
-      - name: cargo clippy
+      - name: Rust lint
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: cargo test
+      - name: Rust tests
         run: cargo test --workspace

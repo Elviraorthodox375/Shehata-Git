@@ -371,7 +371,7 @@ mod tests {
 
     #[tokio::test]
     async fn doctor_runs_on_dev_machine() {
-        // The dev machine has git + gh installed (verified in Phase 0).
+        // The test machine has Git and GitHub CLI installed.
         let report = Doctor::new().run().await;
         assert_eq!(report.checks.len(), 8);
         let git = report.checks.iter().find(|c| c.id == "git").unwrap();

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   AlertCircle,
   ArrowRight,
@@ -25,7 +25,9 @@ import {
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SearchField } from "@/components/ui/SearchField";
+import { displayRepositoryPath } from "@/lib/repository-workspace";
 import {
   addRepository,
   assignRepository,
@@ -56,6 +58,7 @@ export function RepositoriesPage({
   const [selectedRepo, setSelectedRepo] = useState<RepositorySummary | null>(null);
   const [guidedRepositoryId, setGuidedRepositoryId] = useState<string | null>(null);
   const [changesRepo, setChangesRepo] = useState<RepositorySummary | null>(null);
+  const [repoToUnlink, setRepoToUnlink] = useState<RepositorySummary | null>(null);
   const [assignmentNotice, setAssignmentNotice] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const repos = useQuery({ queryKey: ["repositories"], queryFn: listRepositories });
@@ -113,17 +116,15 @@ export function RepositoriesPage({
   const unlink = useMutation({
     mutationFn: (repositoryId: string) => unlinkRepository(repositoryId, false),
     onSuccess: async () => {
+      setRepoToUnlink(null);
       await queryClient.invalidateQueries({ queryKey: ["repositories"] });
       setAssignmentNotice("Repository routing was removed and original Git settings restored.");
     },
+    onError: () => setRepoToUnlink(null),
   });
 
-  async function confirmUnlink(repo: RepositorySummary) {
-    const approved = await confirmDialog(
-      `Unlink ${repo.display_name}? Credential settings will be restored; local commit identity will be kept.`,
-      { title: "Unlink repository", kind: "warning" },
-    );
-    if (approved) unlink.mutate(repo.id);
+  function confirmUnlink(repo: RepositorySummary) {
+    setRepoToUnlink(repo);
   }
 
   async function chooseRepository() {
@@ -322,6 +323,21 @@ export function RepositoriesPage({
       )}
 
       {changesRepo && <GitActionsDialog repo={changesRepo} onClose={() => setChangesRepo(null)} />}
+
+      {repoToUnlink && (
+        <ConfirmDialog
+          eyebrow="Restore repository routing"
+          title={`Unlink ${repoToUnlink.display_name}?`}
+          description="Remove Shehata Git credential routing from this repository and restore the Git settings that existed before connection."
+          detail="Repository files and commits are untouched. The local commit author is kept, and the GitHub account stays signed in on this PC."
+          confirmLabel="Unlink and restore"
+          cancelLabel="Keep route"
+          pendingLabel="Restoring…"
+          pending={unlink.isPending}
+          onCancel={() => setRepoToUnlink(null)}
+          onConfirm={() => unlink.mutate(repoToUnlink.id)}
+        />
+      )}
     </div>
   );
 }
@@ -408,7 +424,7 @@ function RepositoryRow({
               )}
             </div>
             <p className="mt-1 truncate font-mono text-[0.7rem] text-muted-foreground">
-              {repo.canonical_path}
+              {displayRepositoryPath(repo.canonical_path)}
             </p>
           </div>
         </div>
@@ -553,6 +569,7 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState("");
   const [networkNotice, setNetworkNotice] = useState<string | null>(null);
+  const [confirmingPush, setConfirmingPush] = useState(false);
   const [pushPolicy, setPushPolicy] = useState<PushPolicy>(normalizePushPolicy(repo.push_policy));
   const status = useQuery({
     queryKey: ["repository-status", repo.id],
@@ -593,11 +610,13 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
   const push = useMutation({
     mutationFn: () => pushRepository(repo.id),
     onSuccess: async (result) => {
+      setConfirmingPush(false);
       setNetworkNotice(
         `Normal push completed to ${result.remote_name}/${result.branch} through @${result.account_login}.`,
       );
       await refresh();
     },
+    onError: () => setConfirmingPush(false),
   });
   const policy = useMutation({
     mutationFn: (value: PushPolicy) => setRepositoryPushPolicy(repo.id, value),
@@ -634,13 +653,9 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
     });
   }
 
-  async function confirmPush() {
+  function confirmPush() {
     setNetworkNotice(null);
-    const approved = await confirmDialog(
-      `Push ${repo.display_name} normally through @${repo.assigned_login}? Force push is never used.`,
-      { title: "Confirm normal push", kind: "warning" },
-    );
-    if (approved) push.mutate();
+    setConfirmingPush(true);
   }
 
   return (
@@ -657,7 +672,7 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
               <FileDiff className="h-5 w-5 text-primary" aria-hidden />
             </div>
             <div>
-              <p className="eyebrow">Phase 7 / safe Git actions</p>
+              <p className="eyebrow">Guarded local Git actions</p>
               <h2 id="changes-title" className="mt-1 font-display text-xl font-semibold">
                 Changes in {repo.display_name}
               </h2>
@@ -845,6 +860,27 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
           </Button>
         </footer>
       </section>
+
+      {confirmingPush && (
+        <ConfirmDialog
+          eyebrow="Guarded normal push"
+          title={`Push ${repo.display_name}?`}
+          description={
+            <>
+              Push committed changes normally through{" "}
+              <strong className="text-foreground">@{repo.assigned_login}</strong>.
+            </>
+          }
+          detail="Uncommitted files remain local. Force push is unavailable, and the repository identity route does not change."
+          confirmLabel="Push safely"
+          cancelLabel="Review first"
+          pendingLabel="Pushing…"
+          pending={push.isPending}
+          tone="primary"
+          onCancel={() => setConfirmingPush(false)}
+          onConfirm={() => push.mutate()}
+        />
+      )}
     </div>
   );
 }
@@ -970,7 +1006,7 @@ function AssignmentDialog({
                     value={commitName}
                     onChange={(event) => setCommitName(event.target.value)}
                     maxLength={128}
-                    placeholder="e.g. Mohamed Shehata"
+                    placeholder="e.g. Ada Lovelace"
                     className="h-11 w-full rounded-[0.5rem] border border-input bg-background/45 px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary focus:ring-2 focus:ring-primary/15"
                   />
                 </label>
@@ -992,7 +1028,7 @@ function AssignmentDialog({
               <div className="flex gap-3 border border-warning/25 bg-warning/[0.05] p-3 text-xs leading-5 text-muted-foreground">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
                 Account assignment will be saved, but automatic credential routing needs an HTTPS
-                remote in Phase 6.
+                remote during connection setup.
               </div>
             )}
 
@@ -1101,7 +1137,7 @@ function AccountPicker({
       {open && (
         <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 overflow-hidden rounded-[0.8rem] border border-white/10 bg-surface-elevated/95 shadow-[0_24px_70px_rgba(0,0,0,0.55)] backdrop-blur-2xl">
           <div className="border-b border-white/10 p-2.5">
-            <label className="glass-input flex min-h-11 items-center gap-2.5 px-3">
+            <label className="glass-input flex min-h-11 items-center gap-2.5 px-3 focus-within:border-primary/45">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               <span className="sr-only">Search GitHub accounts</span>
               <input
@@ -1109,7 +1145,7 @@ function AccountPicker({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search GitHub accounts…"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/55 [&::-webkit-search-cancel-button]:hidden"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/55 focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-search-cancel-button]:hidden"
               />
               <span className="font-mono text-[0.65rem] text-muted-foreground/60">
                 {filtered.length}/{accounts.length}

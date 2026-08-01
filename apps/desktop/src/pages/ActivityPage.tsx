@@ -80,14 +80,17 @@ export function ActivityPage() {
       </section>
 
       <div className="liquid-panel flex flex-col gap-3 rounded-[0.8rem] p-3 sm:flex-row sm:items-center">
-        <label className="glass-input flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[0.55rem] px-3">
-          <Search className="h-4 w-4 text-muted-foreground" aria-hidden />
+        <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-[0.65rem] border border-white/10 bg-background/25 px-2 transition-all focus-within:border-primary/40 focus-within:bg-background/40 focus-within:shadow-[0_0_0_3px_hsl(var(--primary)/0.08)]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[0.5rem] bg-white/[0.035] text-muted-foreground">
+            <Search className="h-4 w-4" aria-hidden />
+          </span>
           <span className="sr-only">Search activity</span>
           <input
+            type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search action, account, or event…"
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+            className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
         <div className="flex gap-1 rounded-[0.55rem] border border-white/10 bg-background/20 p-1">

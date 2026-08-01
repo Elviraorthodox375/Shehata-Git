@@ -15,6 +15,12 @@ pub struct RemoveAccountRequest {
     pub login: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct SwitchAccountRequest {
+    pub host: String,
+    pub login: String,
+}
+
 /// List all accounts known to the GitHub CLI, checking whether a token can
 /// actually be retrieved for each. This async discovery step never holds a
 /// SQLite connection across an await point.
@@ -55,6 +61,18 @@ pub async fn remove_account(
     request: &RemoveAccountRequest,
 ) -> Result<Vec<AccountInfo>> {
     gh.logout(&request.host, &request.login)
+        .await
+        .map_err(ShehataError::Github)?;
+    list_accounts(gh).await
+}
+
+/// Change GitHub CLI's explicit default account for one host. Shehata Git's
+/// repository routes remain unchanged and continue to select exact accounts.
+pub async fn switch_active_account(
+    gh: &GhRunner,
+    request: &SwitchAccountRequest,
+) -> Result<Vec<AccountInfo>> {
+    gh.switch_active_account(&request.host, &request.login)
         .await
         .map_err(ShehataError::Github)?;
     list_accounts(gh).await

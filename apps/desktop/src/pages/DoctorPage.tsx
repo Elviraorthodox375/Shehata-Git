@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -9,8 +8,10 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { installPrerequisites, type PrerequisiteId, runDoctor } from "@/lib/tauri";
 import type { CheckStatus, SystemCheck } from "@/lib/types";
@@ -96,6 +97,7 @@ function ReadyCheck({ check }: { check: SystemCheck }) {
 
 export function DoctorPage() {
   const queryClient = useQueryClient();
+  const [setupConfirmOpen, setSetupConfirmOpen] = useState(false);
   const doctor = useQuery({ queryKey: ["doctor"], queryFn: runDoctor });
   const installable = (doctor.data?.checks ?? [])
     .filter((check) => check.status !== "ready" && INSTALLABLE_CHECKS[check.id])
@@ -105,21 +107,18 @@ export function DoctorPage() {
   const setup = useMutation({
     mutationFn: installPrerequisites,
     onSuccess: async () => {
+      setSetupConfirmOpen(false);
       await Promise.all([
         doctor.refetch(),
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
       ]);
     },
+    onError: () => setSetupConfirmOpen(false),
   });
 
-  async function confirmAutomaticSetup() {
-    const labels = installable.map((id) => (id === "git" ? "Git" : "GitHub CLI")).join(" and ");
-    const approved = await confirmDialog(
-      `Download and install ${labels} using Microsoft Windows Package Manager? Package and source agreements will be accepted for these exact packages only.`,
-      { title: "Set up this PC", kind: "info" },
-    );
-    if (approved) setup.mutate(installable);
-  }
+  const installableLabels = installable
+    .map((id) => (id === "git" ? "Git" : "GitHub CLI"))
+    .join(" and ");
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -167,7 +166,11 @@ export function DoctorPage() {
                 </p>
               </div>
             </div>
-            <Button onClick={confirmAutomaticSetup} disabled={setup.isPending} className="shrink-0">
+            <Button
+              onClick={() => setSetupConfirmOpen(true)}
+              disabled={setup.isPending}
+              className="shrink-0"
+            >
               {setup.isPending ? (
                 <Loader2 className="animate-spin" aria-hidden />
               ) : (
@@ -230,6 +233,27 @@ export function DoctorPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {setupConfirmOpen && (
+        <ConfirmDialog
+          eyebrow="Verified Windows setup"
+          title={`Install ${installableLabels}?`}
+          description={
+            <>
+              Download and install the missing official tools through{" "}
+              <strong className="text-foreground">Microsoft WinGet</strong>.
+            </>
+          }
+          detail="Only the exact Git and GitHub CLI package IDs are allowed. Package and source agreements will be accepted for those packages."
+          confirmLabel="Install official tools"
+          cancelLabel="Not now"
+          pendingLabel="Installing…"
+          pending={setup.isPending}
+          tone="primary"
+          onCancel={() => setSetupConfirmOpen(false)}
+          onConfirm={() => setup.mutate(installable)}
+        />
       )}
     </div>
   );

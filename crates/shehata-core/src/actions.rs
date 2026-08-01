@@ -1,4 +1,4 @@
-//! Phase 7 safe local Git actions.
+//! Policy-checked local Git actions.
 //!
 //! This surface intentionally exposes only selected-path staging, unstaging,
 //! and normal commits. Every dynamic value is passed as an argument, never as

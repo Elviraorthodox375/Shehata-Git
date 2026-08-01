@@ -1,8 +1,8 @@
 # Troubleshooting
 
-Plain-language fixes for the most common problems. If none of this helps,
-copy the diagnostics from the app's error dialog (secrets are stripped
-automatically) and open an issue.
+Plain-language fixes for the most common problems. If none of this helps, use
+**Settings → Copy diagnostic report** and open an issue. That report excludes
+credentials, repository paths, installation paths, and executable paths.
 
 ## "Git is missing"
 
@@ -28,9 +28,9 @@ password is ever typed into Shehata Git. Advanced users can also run
 
 ## "Token unavailable" for an account
 
-The GitHub CLI session for that account expired or was removed.
-Refresh it with `gh auth login` (or remove/re-add in the app when that
-feature lands). Shehata Git never sees your password.
+The GitHub CLI session for that account expired or was removed. Remove the
+account from **Identities**, then add it again through the browser flow.
+Shehata Git never sees your password.
 
 ## Push asks for a password in the terminal
 
@@ -50,7 +50,7 @@ WebView2 is missing or broken. Install/repair it from
 
 ## Where is my data?
 
-- Database: `%APPDATA%\shehata-git\shehata.db` (no tokens inside — ever)
+- Database: `%APPDATA%\Shehata\shehata-git\data\shehata.db` (no tokens inside)
 - Nothing is written into your repositories except a tiny marker file under
   `.git/shehata-git/` plus standard local git config entries, which
   **Unlink & Restore** removes.

@@ -16,7 +16,6 @@ crates/
   shehata-cli         `shehata` binary
   shehata-credential-helper  `git-credential-shehata` binary
   shehata-mcp         `shehata-mcp` stdio MCP server (official rmcp SDK)
-packages/             Shared JS (reserved)
 docs/DECISIONS/       Architecture decision records
 ```
 
@@ -35,14 +34,17 @@ Tauri command handlers and React components contain **no business logic**.
 
 1. Linking a repository writes a UUID marker into `<git-dir>/shehata-git/`
    and a row into SQLite (no tokens — ever).
-2. Local (never global) git config points `credential.helper` at
-   `shehata --repo-id <uuid>` after backing up previous values.
+2. Local (never global) Git config resets inherited helpers and points
+   `credential.helper` at a strictly generated
+   `!'<absolute-helper-path>' --repo-id <uuid>` entry after backing up previous
+   values.
 3. On any `git push`/`ls-remote`/fetch over HTTPS, git invokes
    `git-credential-shehata`, which looks up the assigned account and fetches a
    short-lived token via `gh auth token --user <login>` — held in memory only
    (`secrecy`), dropped immediately.
-4. The GitHub CLI stays the credential source of truth. We never implement an
-   OAuth app, never store tokens, never switch the active `gh` account.
+4. The GitHub CLI stays the credential source of truth. Repository operations
+   never switch its default account. A separate confirmed user action may
+   change that default for ordinary `gh` commands.
 
 ## Safety model
 

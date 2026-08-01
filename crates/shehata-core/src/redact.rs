@@ -52,16 +52,22 @@ mod tests {
 
     #[test]
     fn redacts_classic_pat() {
-        let input = "fatal: authentication failed for ghp_abcdefghijklmnopqrstuvwxyz1234";
-        let out = redact_github_tokens(input);
+        // Keep the fixture split so repository secret scanners never mistake
+        // a deliberate redaction test for a committed credential.
+        let input = [
+            "fatal: authentication failed for ghp_",
+            "abcdefghijklmnopqrstuvwxyz1234",
+        ]
+        .concat();
+        let out = redact_github_tokens(&input);
         assert!(!out.contains("ghp_"));
         assert!(out.contains(REDACTED));
     }
 
     #[test]
     fn redacts_fine_grained_pat() {
-        let input = "token github_pat_11ABCDEFG0_ijklmnopqrstuvwxyz leaked";
-        let out = redact_github_tokens(input);
+        let input = ["token github_pat_", "11ABCDEFG0_ijklmnopqrstuvwxyz leaked"].concat();
+        let out = redact_github_tokens(&input);
         assert!(!out.contains("github_pat_11"));
     }
 

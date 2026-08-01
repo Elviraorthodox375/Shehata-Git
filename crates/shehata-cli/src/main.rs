@@ -208,15 +208,11 @@ async fn cmd_accounts_list(json: bool) -> Result<(), u8> {
                 "@{} on {}{} — {}",
                 safe_text(&account.login),
                 safe_text(&account.host),
-                if account.active {
-                    " (active in gh)"
-                } else {
-                    ""
-                },
+                if account.active { " (CLI default)" } else { "" },
                 if account.token_available {
-                    "token available"
+                    "ready"
                 } else {
-                    "TOKEN UNAVAILABLE"
+                    "NEEDS SIGN-IN"
                 }
             );
         }

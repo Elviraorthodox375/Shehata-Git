@@ -10,6 +10,7 @@ cargo test --workspace
 pnpm --filter @shehata/desktop test
 
 # Lint / types / format
+pnpm prepare:sidecars # once in a clean clone
 pnpm --filter @shehata/desktop typecheck
 pnpm --filter @shehata/desktop lint
 cargo fmt --all -- --check

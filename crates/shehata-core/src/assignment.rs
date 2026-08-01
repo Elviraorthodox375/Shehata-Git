@@ -1,4 +1,4 @@
-//! Phase 5 repository assignment and local commit identity.
+//! Repository assignment and local commit identity.
 //!
 //! The operation is intentionally local-only: it writes a marker under the
 //! repository's Git metadata, updates local `user.name` / `user.email` when

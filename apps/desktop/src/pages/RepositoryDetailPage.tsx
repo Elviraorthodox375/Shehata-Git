@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import {
   AlertCircle,
   ArrowDown,
@@ -24,6 +23,15 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { SearchField } from "@/components/ui/SearchField";
+import {
+  decideSmartSync,
+  displayRepositoryPath,
+  filterWorkspaceChanges,
+  isStagedChange,
+  type WorkspaceFileFilter,
+} from "@/lib/repository-workspace";
 import {
   commitRepository,
   getRepositoryFileDiff,
@@ -34,6 +42,7 @@ import {
   previewRepositorySync,
   pullRepository,
   pushRepository,
+  type SyncPreview,
   setRepositoryPushPolicy,
   stageRepositoryPaths,
   unstageRepositoryPaths,
@@ -45,13 +54,29 @@ interface RepositoryDetailPageProps {
   onBack: () => void;
 }
 
+const WORKSPACE_FILE_FILTERS: Array<{
+  value: WorkspaceFileFilter;
+  label: string;
+}> = [
+  { value: "all", label: "All" },
+  { value: "changed", label: "Changed" },
+  { value: "staged", label: "Staged" },
+  { value: "untracked", label: "Untracked" },
+];
+
 export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailPageProps) {
   const queryClient = useQueryClient();
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [activePath, setActivePath] = useState<string | null>(null);
   const [showStagedDiff, setShowStagedDiff] = useState(false);
   const [message, setMessage] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [fileSearch, setFileSearch] = useState("");
+  const [fileFilter, setFileFilter] = useState<WorkspaceFileFilter>("all");
+  const [pendingSyncPush, setPendingSyncPush] = useState<SyncPreview | null>(null);
+  const [notice, setNotice] = useState<{
+    tone: "success" | "warning";
+    message: string;
+  } | null>(null);
 
   const repositories = useQuery({ queryKey: ["repositories"], queryFn: listRepositories });
   const repository = repositories.data?.find((item) => item.id === repositoryId);
@@ -61,7 +86,23 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
   });
   const activity = useQuery({ queryKey: ["audit"], queryFn: listAuditEvents });
   const activeChange = status.data?.changes.find((change) => change.path === activePath);
-  const canShowStaged = activeChange ? isStaged(activeChange) : false;
+  const changes = status.data?.changes ?? [];
+  const visibleChanges = useMemo(
+    () => filterWorkspaceChanges(changes, fileSearch, fileFilter),
+    [changes, fileFilter, fileSearch],
+  );
+  const filterCounts = useMemo(
+    () => ({
+      all: changes.length,
+      changed: filterWorkspaceChanges(changes, "", "changed").length,
+      staged: filterWorkspaceChanges(changes, "", "staged").length,
+      untracked: filterWorkspaceChanges(changes, "", "untracked").length,
+    }),
+    [changes],
+  );
+  const allVisibleSelected =
+    visibleChanges.length > 0 && visibleChanges.every((change) => selectedPaths.has(change.path));
+  const canShowStaged = activeChange ? isStagedChange(activeChange) : false;
   const canShowWorking = activeChange ? activeChange.worktree_status !== " " : false;
   const diff = useQuery({
     queryKey: ["repository-diff", repositoryId, activePath, showStagedDiff],
@@ -70,17 +111,16 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
   });
 
   useEffect(() => {
-    const changes = status.data?.changes ?? [];
-    if (changes.length === 0) {
+    if (changes.length === 0 || visibleChanges.length === 0) {
       setActivePath(null);
       return;
     }
-    if (!activePath || !changes.some((change) => change.path === activePath)) {
-      const first = changes[0];
+    if (!activePath || !visibleChanges.some((change) => change.path === activePath)) {
+      const first = visibleChanges[0];
       setActivePath(first.path);
-      setShowStagedDiff(isStaged(first));
+      setShowStagedDiff(isStagedChange(first));
     }
-  }, [activePath, status.data?.changes]);
+  }, [activePath, changes.length, visibleChanges]);
 
   useEffect(() => {
     if (!activeChange) return;
@@ -101,14 +141,17 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
   const stage = useMutation({
     mutationFn: (paths: string[]) => stageRepositoryPaths(repositoryId, paths),
     onSuccess: async () => {
-      setNotice("Selected files are staged and ready to commit.");
+      setNotice({ tone: "success", message: "Selected files are staged and ready to commit." });
       await refresh();
     },
   });
   const unstage = useMutation({
     mutationFn: (paths: string[]) => unstageRepositoryPaths(repositoryId, paths),
     onSuccess: async () => {
-      setNotice("Selected files were removed from the staging area. Worktree files are untouched.");
+      setNotice({
+        tone: "success",
+        message: "Selected files were removed from staging. Worktree files are untouched.",
+      });
       await refresh();
     },
   });
@@ -116,21 +159,30 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
     mutationFn: () => commitRepository(repositoryId, message),
     onSuccess: async (result) => {
       setMessage("");
-      setNotice(`Commit created: ${result.commit?.slice(0, 8) ?? "complete"}.`);
+      setNotice({
+        tone: "success",
+        message: `Commit created: ${result.commit?.slice(0, 8) ?? "complete"}.`,
+      });
       await refresh();
     },
   });
   const pull = useMutation({
     mutationFn: () => pullRepository(repositoryId),
     onSuccess: async (result) => {
-      setNotice(`Fast-forwarded ${result.branch} through @${result.account_login}.`);
+      setNotice({
+        tone: "success",
+        message: `Fast-forwarded ${result.branch} through @${result.account_login}.`,
+      });
       await refresh();
     },
   });
   const push = useMutation({
     mutationFn: () => pushRepository(repositoryId),
     onSuccess: async (result) => {
-      setNotice(`Pushed ${result.branch} normally through @${result.account_login}.`);
+      setNotice({
+        tone: "success",
+        message: `Pushed ${result.branch} normally through @${result.account_login}.`,
+      });
       await refresh();
     },
   });
@@ -138,7 +190,7 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
   const policy = useMutation({
     mutationFn: (value: PushPolicy) => setRepositoryPushPolicy(repositoryId, value),
     onSuccess: async () => {
-      setNotice("Push policy updated for this repository.");
+      setNotice({ tone: "success", message: "Push policy updated for this repository." });
       await queryClient.invalidateQueries({ queryKey: ["repositories"] });
     },
   });
@@ -162,7 +214,7 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
     push.error ??
     inspectSync.error ??
     policy.error;
-  const stagedCount = status.data?.changes.filter(isStaged).length ?? 0;
+  const stagedCount = status.data?.changes.filter(isStagedChange).length ?? 0;
   const recentActivity = useMemo(
     () => activity.data?.filter((event) => event.repository_id === repositoryId).slice(0, 6) ?? [],
     [activity.data, repositoryId],
@@ -177,28 +229,52 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
     });
   }
 
+  function toggleVisiblePaths() {
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) {
+        for (const change of visibleChanges) next.delete(change.path);
+      } else {
+        for (const change of visibleChanges) next.add(change.path);
+      }
+      return next;
+    });
+  }
+
   async function smartSync() {
     setNotice(null);
     const preview = await inspectSync.mutateAsync();
-    if (preview.ahead === 0 && preview.behind === 0) {
-      setNotice(`${preview.branch} is already in sync with ${preview.remote_name}.`);
+    const decision = decideSmartSync(preview.ahead, preview.behind);
+    if (decision === "in_sync") {
+      setNotice({
+        tone: "success",
+        message: `${preview.branch} is already in sync with ${preview.remote_name}.`,
+      });
       return;
     }
-    if (preview.ahead > 0 && preview.behind > 0) {
-      setNotice(
-        `Sync paused: local and remote both have commits. Shehata Git will not merge or rebase automatically.`,
-      );
+    if (decision === "diverged") {
+      setNotice({
+        tone: "warning",
+        message:
+          "Sync paused: local and remote both have commits. Shehata Git will not merge or rebase automatically.",
+      });
       return;
     }
-    if (preview.behind > 0) {
+    if (decision === "pull") {
       await pull.mutateAsync();
+      inspectSync.reset();
       return;
     }
-    const approved = await confirmDialog(
-      `Push ${preview.ahead} local commit${preview.ahead === 1 ? "" : "s"} normally through @${preview.account_login}?`,
-      { title: "Smart Sync", kind: "warning" },
-    );
-    if (approved) await push.mutateAsync();
+    setPendingSyncPush(preview);
+  }
+
+  async function confirmSmartPush() {
+    try {
+      await push.mutateAsync();
+      inspectSync.reset();
+    } finally {
+      setPendingSyncPush(null);
+    }
   }
 
   if (!repository && repositories.isLoading) {
@@ -244,8 +320,11 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
             <h2 className="mt-4 truncate font-display text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
               {repository.display_name}
             </h2>
-            <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
-              {repository.canonical_path}
+            <p
+              className="mt-2 truncate font-mono text-xs text-muted-foreground"
+              title={repository.canonical_path}
+            >
+              {displayRepositoryPath(repository.canonical_path)}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -253,14 +332,20 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
               <RefreshCw className={status.isFetching ? "animate-spin" : undefined} aria-hidden />
               Refresh
             </Button>
-            <Button onClick={smartSync} disabled={pending || !repository.routing_configured}>
-              {inspectSync.isPending || pull.isPending || push.isPending ? (
-                <Loader2 className="animate-spin" aria-hidden />
-              ) : (
-                <Sparkles aria-hidden />
-              )}
-              Smart Sync
-            </Button>
+            {repository.routing_configured ? (
+              <Button onClick={smartSync} disabled={pending}>
+                {inspectSync.isPending || pull.isPending || push.isPending ? (
+                  <Loader2 className="animate-spin" aria-hidden />
+                ) : (
+                  <Sparkles aria-hidden />
+                )}
+                Smart Sync
+              </Button>
+            ) : (
+              <Button onClick={onBack}>
+                <Route aria-hidden /> Finish setup
+              </Button>
+            )}
           </div>
         </div>
         <div className="grid border-t border-white/10 bg-background/10 sm:grid-cols-2 lg:grid-cols-4">
@@ -283,6 +368,52 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
         </div>
       </section>
 
+      {!repository.routing_configured && (
+        <section className="liquid-panel overflow-hidden rounded-[1rem] border-warning/25">
+          <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.7rem] border border-warning/25 bg-warning/10 text-warning">
+                <AlertCircle className="h-5 w-5" aria-hidden />
+              </span>
+              <div>
+                <p className="eyebrow text-warning">Smart Sync is safely locked</p>
+                <h3 className="mt-1 font-display text-lg font-semibold">
+                  Finish the identity route first.
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Shehata Git will not fetch, pull, or push until the remote, account, and
+                  credential route are all explicit and verified.
+                </p>
+              </div>
+            </div>
+            <Button className="shrink-0" variant="outline" onClick={onBack}>
+              <ArrowLeft aria-hidden /> Back to registry
+            </Button>
+          </div>
+          <div className="grid border-t border-white/10 bg-background/15 md:grid-cols-3 md:divide-x md:divide-white/10">
+            <ReadinessStep
+              label="GitHub remote"
+              ready={Boolean(repository.remote_name && repository.remote_url)}
+              detail={repository.remote_name ? repository.remote_name : "No remote detected"}
+            />
+            <ReadinessStep
+              label="Identity assigned"
+              ready={Boolean(repository.assigned_login)}
+              detail={
+                repository.assigned_login ? `@${repository.assigned_login}` : "Choose an account"
+              }
+            />
+            <ReadinessStep
+              label="Route verified"
+              ready={repository.routing_configured}
+              detail={
+                repository.routing_configured ? "Credential helper ready" : "Connection required"
+              }
+            />
+          </div>
+        </section>
+      )}
+
       {accountMismatch && (
         <InlineNotice tone="warning">
           Remote owner is {repository.owner}, while pushes are routed through @
@@ -290,12 +421,12 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
           pushing.
         </InlineNotice>
       )}
-      {notice && <InlineNotice tone="success">{notice}</InlineNotice>}
+      {notice && <InlineNotice tone={notice.tone}>{notice.message}</InlineNotice>}
       {error && <InlineNotice tone="error">{errorMessage(error)}</InlineNotice>}
 
       <div className="grid gap-4 lg:grid-cols-[19rem_minmax(0,1fr)_20rem]">
         <section className="liquid-panel min-h-[32rem] overflow-hidden rounded-[1rem]">
-          <header className="border-b border-white/10 p-4">
+          <header className="space-y-3 border-b border-white/10 p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="eyebrow">Working tree</p>
@@ -305,6 +436,45 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
                 {status.data?.changes.length ?? 0}
               </span>
             </div>
+            <SearchField
+              value={fileSearch}
+              onChange={setFileSearch}
+              label="Search changed files"
+              placeholder="Search changed files…"
+              resultCount={visibleChanges.length}
+              className="min-h-11 rounded-[0.7rem]"
+            />
+            <fieldset className="grid grid-cols-2 gap-1.5">
+              <legend className="sr-only">Changed file filters</legend>
+              {WORKSPACE_FILE_FILTERS.map((filter) => (
+                <button
+                  key={filter.value}
+                  type="button"
+                  onClick={() => setFileFilter(filter.value)}
+                  className={cn(
+                    "flex min-h-9 items-center justify-between rounded-[0.55rem] border px-2.5 text-[0.68rem] font-semibold transition-colors",
+                    fileFilter === filter.value
+                      ? "border-primary/35 bg-primary/[0.1] text-primary"
+                      : "border-white/[0.07] bg-background/20 text-muted-foreground hover:border-white/15 hover:text-foreground",
+                  )}
+                  aria-pressed={fileFilter === filter.value}
+                >
+                  <span>{filter.label}</span>
+                  <span className="font-mono text-[0.625rem]">
+                    {String(filterCounts[filter.value]).padStart(2, "0")}
+                  </span>
+                </button>
+              ))}
+            </fieldset>
+            {visibleChanges.length > 0 && (
+              <button
+                type="button"
+                onClick={toggleVisiblePaths}
+                className="text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+              >
+                {allVisibleSelected ? "Clear visible selection" : "Select visible files"}
+              </button>
+            )}
           </header>
           <div className="scrollbar-thin max-h-[38rem] overflow-y-auto p-2">
             {status.isLoading && <LoadingState label="Reading changes…" compact />}
@@ -315,7 +485,16 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
                 <p className="mt-1 text-xs text-muted-foreground">Nothing waiting to commit.</p>
               </div>
             )}
-            {status.data?.changes.map((change) => (
+            {changes.length > 0 && visibleChanges.length === 0 && (
+              <div className="p-5 text-center">
+                <FileCode2 className="mx-auto h-6 w-6 text-muted-foreground/45" aria-hidden />
+                <p className="mt-2 text-sm font-medium">No files match this view</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Clear the search or choose another filter.
+                </p>
+              </div>
+            )}
+            {visibleChanges.map((change) => (
               <div
                 key={`${change.index_status}${change.worktree_status}:${change.path}`}
                 className={cn(
@@ -338,7 +517,7 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
                   type="button"
                   onClick={() => {
                     setActivePath(change.path);
-                    setShowStagedDiff(isStaged(change));
+                    setShowStagedDiff(isStagedChange(change));
                   }}
                   className="min-w-0 py-2.5 pr-3 text-left"
                 >
@@ -346,7 +525,7 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
                   <span
                     className={cn(
                       "mt-1 block text-[0.65rem] font-semibold uppercase tracking-wider",
-                      isStaged(change) ? "text-success" : "text-warning",
+                      isStagedChange(change) ? "text-success" : "text-warning",
                     )}
                   >
                     {changeLabel(change)} · {change.index_status}
@@ -455,20 +634,26 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               Smart Sync fetches first, then chooses only a safe fast-forward pull or normal push.
             </p>
-            {inspectSync.data && (
+            {repository.routing_configured && inspectSync.data && (
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <SyncMetric icon={ArrowUp} label="AHEAD" value={inspectSync.data.ahead} />
                 <SyncMetric icon={ArrowDown} label="BEHIND" value={inspectSync.data.behind} />
               </div>
             )}
-            <Button
-              className="mt-4 w-full"
-              variant="outline"
-              onClick={smartSync}
-              disabled={pending || !repository.routing_configured}
+            <div
+              className={cn(
+                "mt-4 rounded-[0.7rem] border p-3 text-xs leading-5",
+                repository.routing_configured
+                  ? "border-success/20 bg-success/[0.06] text-success"
+                  : "border-warning/20 bg-warning/[0.06] text-warning",
+              )}
             >
-              <Sparkles aria-hidden /> Inspect & sync
-            </Button>
+              {repository.routing_configured
+                ? inspectSync.data
+                  ? "Inspection complete. Counts reflect the latest fetched remote state."
+                  : "Ready. Use Smart Sync above when you want to inspect the remote."
+                : "Locked until the remote and identity route are verified."}
+            </div>
           </section>
 
           <section className="liquid-panel rounded-[1rem] p-4">
@@ -532,6 +717,28 @@ export function RepositoryDetailPage({ repositoryId, onBack }: RepositoryDetailP
           </section>
         </aside>
       </div>
+
+      {pendingSyncPush && (
+        <ConfirmDialog
+          eyebrow="Smart Sync / outgoing commits"
+          title={`Push ${pendingSyncPush.ahead} local commit${pendingSyncPush.ahead === 1 ? "" : "s"}?`}
+          description={
+            <>
+              Push normally to{" "}
+              <strong className="text-foreground">{pendingSyncPush.remote_name}</strong> through{" "}
+              <strong className="text-foreground">@{pendingSyncPush.account_login}</strong>.
+            </>
+          }
+          detail="Only committed changes are pushed. Working-tree files stay local, force push is unavailable, and the repository identity route does not change."
+          confirmLabel="Push safely"
+          cancelLabel="Review first"
+          pendingLabel="Pushing…"
+          pending={push.isPending}
+          tone="primary"
+          onCancel={() => setPendingSyncPush(null)}
+          onConfirm={() => void confirmSmartPush()}
+        />
+      )}
     </div>
   );
 }
@@ -622,6 +829,39 @@ function DiffViewer({
   );
 }
 
+function ReadinessStep({
+  label,
+  ready,
+  detail,
+}: {
+  label: string;
+  ready: boolean;
+  detail: string;
+}) {
+  return (
+    <div className="flex min-h-20 items-center gap-3 border-b border-white/10 px-5 py-3 last:border-b-0 md:border-b-0">
+      <span
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
+          ready
+            ? "border-success/30 bg-success/10 text-success"
+            : "border-warning/25 bg-warning/10 text-warning",
+        )}
+      >
+        {ready ? (
+          <Check className="h-3.5 w-3.5" aria-hidden />
+        ) : (
+          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+        )}
+      </span>
+      <div className="min-w-0">
+        <p className="data-label">{label}</p>
+        <p className="mt-1 truncate text-xs font-medium text-foreground">{detail}</p>
+      </div>
+    </div>
+  );
+}
+
 function HeroMetric({
   icon: Icon,
   label,
@@ -708,14 +948,10 @@ function LoadingState({ label, compact = false }: { label: string; compact?: boo
   );
 }
 
-function isStaged(change: { index_status: string }): boolean {
-  return change.index_status !== " " && change.index_status !== "?";
-}
-
 function changeLabel(change: { index_status: string; worktree_status: string }): string {
   if (change.index_status === "?" && change.worktree_status === "?") return "Untracked";
-  if (isStaged(change) && change.worktree_status !== " ") return "Staged + changed";
-  if (isStaged(change)) return "Staged";
+  if (isStagedChange(change) && change.worktree_status !== " ") return "Staged + changed";
+  if (isStagedChange(change)) return "Staged";
   return "Changed";
 }
 

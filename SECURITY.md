@@ -2,24 +2,36 @@
 
 ## Supported versions
 
+Shehata Git is currently an early preview. Security fixes are applied to the
+latest `0.1.x` source and the newest published preview, when one exists.
+
 | Version | Supported |
 |---|---|
-| 0.1.x   | ✅ (early development) |
+| Latest `0.1.x` | Yes |
+| Older previews | No |
 
-## Reporting a vulnerability
+## Report a vulnerability privately
 
-**Please do not open a public issue for security reports.**
+Do **not** open a public issue and do not include tokens, credentials, private
+repository URLs, or customer information in a report.
 
-Email: security@shehata.dev (placeholder until the project domain is live —
-until then, open a private GitHub security advisory on this repository).
+Use GitHub's private vulnerability reporting for this repository:
 
-Include: affected version, reproduction steps, impact. We acknowledge within
-72 hours and coordinate disclosure with you.
+<https://github.com/moshehata95/Shehata-Git/security/advisories/new>
 
-## Scope notes
+Include the affected version or commit, impact, minimum reproduction steps, and
+whether the issue may have exposed credential material. Maintainers will aim to
+acknowledge complete reports within 72 hours and will coordinate remediation
+and disclosure with the reporter.
 
-Shehata Git handles GitHub credentials indirectly (via the GitHub CLI) and
-never stores them. Reports about token leakage through logs, database,
-frontend state, or the MCP protocol are treated as **critical**.
+## High-priority areas
 
-The full security model lives in [docs/SECURITY.md](docs/SECURITY.md).
+- Token or credential exposure through logs, SQLite, UI state, diagnostics,
+  errors, clipboard behavior, or MCP responses
+- Routing a repository to an identity other than the one explicitly assigned
+- Command injection, unsafe path handling, or arbitrary shell execution
+- Repository-local Git configuration changes without exact backup and restore
+- Bypassing push policies or gaining access to destructive Git operations
+
+The complete design and trust boundaries are documented in
+[docs/SECURITY.md](docs/SECURITY.md).

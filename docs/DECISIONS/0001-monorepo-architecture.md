@@ -22,7 +22,8 @@ Use a single monorepo with:
   - `shehata-cli` — `shehata` binary
   - `shehata-credential-helper` — `git-credential-shehata` binary
   - `shehata-mcp` — `shehata-mcp` stdio MCP server binary
-- **pnpm workspace** for JS packages (`packages/ui`, `packages/shared-types`)
+- **pnpm workspace** for the desktop frontend, leaving room for shared packages
+  only when a concrete reuse boundary appears
 
 Dependency direction: UI/CLI/MCP → `shehata-core` → storage/git/github.
 Business logic never lives in Tauri command handlers or React components.
@@ -36,5 +37,8 @@ Business logic never lives in Tauri command handlers or React components.
 ## Consequences
 
 - Requires Rust + MSVC Build Tools on Windows dev machines.
-- All external commands run with argument arrays, never shell strings.
+- App-launched external commands use fixed executables and argument arrays. The
+  sole shell-form exception is Git's required repository-local `!` credential
+  helper entry, which is built from a canonical executable path and validated
+  repository UUID.
 - Every crate is independently testable with fake `git`/`gh` binaries injected via PATH.

@@ -16,10 +16,17 @@ apps/desktop/src-tauri/binaries/
 dist/
 dist-ssr/
 *.local
+*.exe
+*.msi
+*.msix
+*.dmg
+*.AppImage
 
 # Logs
 *.log
 logs/
+*.dmp
+crash-reports/
 
 # OS
 Thumbs.db
@@ -35,9 +42,23 @@ Desktop.ini
 # Env & secrets — never commit
 .env
 .env.*
+!.env.example
 *.pem
 *.key
+*.p12
+*.pfx
+*.mobileprovision
+id_rsa
+id_ed25519
+
+# Local application data
+*.db
+*.db-shm
+*.db-wal
 
 # Test artifacts
 coverage/
 tmp/
+
+# Private agent/session notes
+HANDOFF*.md
