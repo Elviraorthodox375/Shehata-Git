@@ -767,16 +767,21 @@ async fn finish_network_action(
                 .stdout
                 .trim()
                 .to_string();
+            let summary = network_action_summary(
+                action,
+                &plan.repository.display_name,
+                &plan.branch,
+                &head_commit,
+                subject_of_head(Path::new(&plan.repository.canonical_path))
+                    .await
+                    .as_deref(),
+            );
             write_network_audit(
                 db_path,
                 &plan.repository.id,
                 Some(&plan.account.login),
                 action,
-                if action == "push" {
-                    "Normal push completed"
-                } else {
-                    "Fast-forward-only pull completed"
-                },
+                &summary,
                 "success",
                 Some(0),
                 started,
@@ -915,6 +920,58 @@ fn enforce_push_policy(policy: &str, caller: ActionCaller, approved: bool) -> Re
         ),
         PushPolicy::BlockAiPush => Ok(()),
     }
+}
+
+/// Subject line of the commit at HEAD, for the activity trail.
+///
+/// A commit message is author-written text, so it is redacted and truncated
+/// before it can reach the audit database.
+async fn subject_of_head(repo_path: &Path) -> Option<String> {
+    const MAX_SUBJECT: usize = 60;
+    let git = GitRunner::locate().ok()?;
+    let output = git
+        .run_in(Some(repo_path), &["log", "-1", "--format=%s"])
+        .await
+        .ok()?;
+    if !output.success() {
+        return None;
+    }
+    let subject = crate::redact::redact_github_tokens(output.stdout.trim());
+    if subject.is_empty() {
+        return None;
+    }
+    let (clean, truncated) = truncate_utf8(subject, MAX_SUBJECT);
+    Some(if truncated {
+        format!("{}…", clean.trim_end())
+    } else {
+        clean
+    })
+}
+
+/// Build the human line shown in the activity trail.
+///
+/// It keeps naming the push "normal" — the app never force pushes, and the
+/// trail is where that guarantee has to stay visible — then adds what the
+/// action actually touched.
+fn network_action_summary(
+    action: &str,
+    repository: &str,
+    branch: &str,
+    head_commit: &str,
+    subject: Option<&str>,
+) -> String {
+    let verb = if action == "push" {
+        "Normal push"
+    } else {
+        "Fast-forward pull"
+    };
+    let short_commit = head_commit.chars().take(7).collect::<String>();
+    let mut summary = format!("{verb} · {repository} ({branch}) · {short_commit}");
+    if let Some(subject) = subject {
+        summary.push_str(" · ");
+        summary.push_str(subject);
+    }
+    summary
 }
 
 async fn execute_pull(
@@ -1455,6 +1512,26 @@ mod tests {
             },
         )
         .is_err());
+    }
+
+    #[test]
+    fn network_summary_names_the_action_and_what_it_touched() {
+        let push = network_action_summary(
+            "push",
+            "Shehata Git",
+            "main",
+            "0545b97a1c2d3e4f",
+            Some("docs: mark shipped roadmap items"),
+        );
+        assert_eq!(
+            push,
+            "Normal push · Shehata Git (main) · 0545b97 · docs: mark shipped roadmap items"
+        );
+        // The force-push guarantee has to stay visible in the trail.
+        assert!(push.starts_with("Normal push"));
+
+        let pull = network_action_summary("pull_ff_only", "site", "master", "abcdef1234", None);
+        assert_eq!(pull, "Fast-forward pull · site (master) · abcdef1");
     }
 
     #[test]

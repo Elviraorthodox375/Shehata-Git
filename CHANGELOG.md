@@ -4,6 +4,16 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.12 - 2026-08-02
+
+### Changed
+
+- Activity entries now identify what an action touched: repository, branch,
+  short commit, and the commit subject — instead of one fixed sentence that
+  looked identical for every repository. Pushes are still labelled "Normal
+  push", because the trail is where the never-force-push guarantee has to stay
+  visible. Commit subjects are redacted and truncated before being stored.
+
 ## 0.1.11 - 2026-08-01
 
 ### Added
