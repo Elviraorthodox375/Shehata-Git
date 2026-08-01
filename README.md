@@ -4,17 +4,29 @@
   <img src="apps/desktop/public/logo-mark.svg" width="104" alt="Shehata Git logo" />
 </p>
 
-<p align="center"><strong>One repo. One identity. Zero switching.</strong></p>
+<p align="center"><strong>Stop pushing GitHub repositories with the wrong account.</strong></p>
 
 <p align="center">
-  A local-first identity router for developers and coding agents that work with
-  multiple GitHub accounts.
+  Shehata Git pins every local repository to one GitHub identity — so your work
+  account never pushes to your personal repo, and your coding agent never pushes
+  as you by accident.
+</p>
+
+<p align="center">
+  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata.Git_0.1.7_x64-setup.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-2ea043?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  &nbsp;
+  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata.Git_0.1.7_aarch64.dmg"><img src="https://img.shields.io/badge/Download%20for%20macOS-1f2328?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+</p>
+
+<p align="center">
+  <sub>Windows 10/11 · macOS (Apple Silicon) · MIT licensed · no account required to try</sub>
 </p>
 
 > [!IMPORTANT]
-> Shehata Git is an early Windows preview. Use disposable repositories while
-> evaluating it, review every assignment before confirming it, and keep normal
-> backups of important work.
+> Shehata Git is an early preview and the installers are not code-signed yet.
+> Windows shows a SmartScreen notice (**More info → Run anyway**) and macOS
+> needs **right-click → Open** the first time. Use disposable repositories while
+> evaluating it and review every assignment before confirming it.
 
 ## Why Shehata Git?
 
@@ -43,18 +55,16 @@ when the assigned account is unavailable.
 
 ## Screenshots
 
-Real, sanitized screenshots will replace these placeholders before the first
-stable release.
-
-| Identity control | Repository routing | Safe activity |
+| Accounts | Repository assignment | Smart Sync |
 |---|---|---|
-| ![Identity control screenshot placeholder](docs/screenshots/identity-control.svg) | ![Repository routing screenshot placeholder](docs/screenshots/repository-routing.svg) | ![Safe activity screenshot placeholder](docs/screenshots/safe-activity.svg) |
+| ![Every GitHub account discovered from GitHub CLI, each marked ready for routing](docs/screenshots/identity-control.svg) | ![Assigning one GitHub account and commit author to a local repository](docs/screenshots/repository-routing.svg) | ![Smart Sync showing ahead and behind counts before choosing a safe action](docs/screenshots/safe-activity.svg) |
+| Accounts are discovered from GitHub CLI — no passwords, no stored tokens. | Each repository is pinned to one identity, enforced outside the app too. | Fetches first, then offers only a fast-forward pull or a normal push. |
 
 ## Requirements
 
-### To run the Windows preview
+### To run the preview
 
-- Windows 10 or 11, x64
+- Windows 10 or 11 (x64), or macOS on Apple Silicon
 - [Git for Windows](https://git-scm.com/download/win)
 - [GitHub CLI](https://cli.github.com/)
 - Microsoft Edge WebView2 Runtime (normally already installed on supported
@@ -75,8 +85,20 @@ On Windows, install the MSVC C++ Build Tools and a Windows SDK.
 
 ## Installation
 
-There is no signed public binary yet. Until a reviewed release is published,
-build from source:
+### Download the installer (recommended)
+
+Grab the latest build from the
+[releases page](https://github.com/moshehata95/Shehata-Git/releases/latest):
+
+| Platform | File |
+|---|---|
+| Windows 10/11 (x64) | `Shehata.Git_<version>_x64-setup.exe` |
+| macOS (Apple Silicon) | `Shehata.Git_<version>_aarch64.dmg` |
+
+Neither installer is code-signed yet, so the first launch needs one extra
+click: **More info → Run anyway** on Windows, **right-click → Open** on macOS.
+
+### Build from source
 
 ```bash
 git clone https://github.com/moshehata95/Shehata-Git.git
@@ -161,10 +183,10 @@ the process in [SECURITY.md](SECURITY.md). Never post credentials in an issue.
 
 ## Roadmap
 
-The immediate focus is a trustworthy Windows beta: sanitized acceptance
-screenshots, clean-machine CI, two-account acceptance testing, code signing,
-and a reviewed installer. macOS packaging and notarization follow after the
-Windows workflow is stable.
+Windows and macOS installers now ship from CI on every tagged release. The
+immediate focus is trust: code signing on both platforms, macOS notarization,
+an Intel macOS build, two-account acceptance testing, and clean-machine
+verification.
 
 See the complete [roadmap](docs/ROADMAP.md).
 
