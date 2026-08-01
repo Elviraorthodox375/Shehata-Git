@@ -13,9 +13,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata.Git_0.1.7_x64-setup.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-2ea043?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
+  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata-Git-windows-x64-setup.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-2ea043?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
   &nbsp;
-  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata.Git_0.1.7_aarch64.dmg"><img src="https://img.shields.io/badge/Download%20for%20macOS-1f2328?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata-Git-macos-apple-silicon.dmg"><img src="https://img.shields.io/badge/Download%20for%20macOS-1f2328?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
 </p>
 
 <p align="center">
@@ -98,8 +98,8 @@ Grab the latest build from the
 
 | Platform | File |
 |---|---|
-| Windows 10/11 (x64) | `Shehata.Git_<version>_x64-setup.exe` |
-| macOS (Apple Silicon) | `Shehata.Git_<version>_aarch64.dmg` |
+| Windows 10/11 (x64) | `Shehata-Git-windows-x64-setup.exe` |
+| macOS (Apple Silicon) | `Shehata-Git-macos-apple-silicon.dmg` |
 
 Neither installer is code-signed yet, so the first launch needs one extra
 click: **More info → Run anyway** on Windows, **right-click → Open** on macOS.

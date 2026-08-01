@@ -25,10 +25,12 @@ jobs:
             label: Windows installer
             bundles: nsis
             path: target/release/bundle/nsis/*.exe
+            stable_name: Shehata-Git-windows-x64-setup.exe
           - os: macos-latest
             label: macOS disk image
             bundles: dmg
             path: target/release/bundle/dmg/*.dmg
+            stable_name: Shehata-Git-macos-apple-silicon.dmg
 
     steps:
       - name: Check out source without persisted credentials
@@ -61,6 +63,15 @@ jobs:
       # Gatekeeper each show a one-time warning users can bypass.
       - name: Build installer
         run: pnpm --filter @shehata/desktop tauri build --bundles ${{ matrix.bundles }}
+
+      # Documentation links to a name that never changes, so the download
+      # buttons keep working after every version bump.
+      - name: Add version-independent installer name
+        shell: bash
+        run: |
+          set -euo pipefail
+          built=$(ls ${{ matrix.path }} | head -1)
+          cp "$built" "$(dirname "$built")/${{ matrix.stable_name }}"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
