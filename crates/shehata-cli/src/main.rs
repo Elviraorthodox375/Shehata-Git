@@ -62,6 +62,20 @@ enum Commands {
         #[arg(long)]
         yes: bool,
     },
+    /// Run a GitHub CLI command as the account assigned to this repository.
+    ///
+    /// The GitHub CLI has no per-repository account, so `gh pr create` normally
+    /// uses whichever account is the CLI default. This applies the repository's
+    /// own identity for one command, then restores the previous default.
+    #[command(trailing_var_arg = true)]
+    Gh {
+        /// Repository path (defaults to the current directory).
+        #[arg(long)]
+        path: Option<String>,
+        /// Arguments passed straight to the GitHub CLI.
+        #[arg(allow_hyphen_values = true, required = true)]
+        args: Vec<String>,
+    },
     /// Start the native Shehata MCP server on stdio.
     Mcp,
     /// Installer-only user PATH maintenance.
@@ -136,6 +150,7 @@ async fn main() -> ExitCode {
         Commands::Status { path } => cmd_status(cli.json, path.as_deref()).await,
         Commands::Test { path } => cmd_test(cli.json, path.as_deref()).await,
         Commands::Push { path, yes } => cmd_push(cli.json, path.as_deref(), yes).await,
+        Commands::Gh { path, args } => cmd_gh(cli.json, path.as_deref(), &args).await,
         Commands::Mcp => cmd_mcp(cli.json).await,
         Commands::Path(PathCommands::Install { directory }) => {
             cmd_user_path(cli.json, &directory, true)
@@ -361,6 +376,29 @@ async fn cmd_repos_unlink(json: bool, reference: &str) -> Result<(), u8> {
     } else {
         println!("Repository unlinked; original local Git configuration was restored.");
         Ok(())
+    }
+}
+
+async fn cmd_gh(json: bool, reference: Option<&str>, args: &[String]) -> Result<(), u8> {
+    let repository = core_repositories::resolve_repository_reference(reference)
+        .await
+        .map_err(|error| fail(json, &error))?;
+    let gh = GhRunner::locate().map_err(|_| {
+        fail_message_text(
+            json,
+            "github_cli_error",
+            "GitHub CLI (gh) was not found on PATH",
+        )
+    })?;
+    let code = core_accounts::run_gh_for_repository(&gh, &repository.id, args)
+        .await
+        .map_err(|error| fail(json, &error))?;
+    // The GitHub CLI has already written its own output to the terminal, so
+    // only its exit code is propagated here.
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(u8::try_from(code).unwrap_or(1))
     }
 }
 

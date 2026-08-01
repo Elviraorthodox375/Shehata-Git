@@ -133,6 +133,82 @@ where
     list_accounts(gh).await
 }
 
+/// Run a GitHub CLI command as one exact account, then restore the previous
+/// CLI default.
+///
+/// `gh` has no per-repository account concept: every command uses whichever
+/// account is active for the host. This makes the assigned identity apply for
+/// the duration of a single command instead, so `gh pr create` in a routed
+/// repository does not depend on which account happens to be the default.
+///
+/// The previous default is restored even when the command fails, and the
+/// GitHub CLI's own exit code is returned unchanged.
+pub async fn run_gh_as(gh: &GhRunner, host: &str, login: &str, args: &[String]) -> Result<i32> {
+    let accounts = list_accounts(gh).await?;
+    let target = accounts
+        .iter()
+        .find(|account| {
+            account.host.eq_ignore_ascii_case(host) && account.login.eq_ignore_ascii_case(login)
+        })
+        .ok_or_else(|| ShehataError::AccountNotAvailable {
+            host: host.to_string(),
+            login: login.to_string(),
+        })?;
+    if !target.token_available {
+        return Err(ShehataError::AccountNotAvailable {
+            host: host.to_string(),
+            login: login.to_string(),
+        });
+    }
+
+    let previous_default = accounts
+        .iter()
+        .find(|account| account.active && account.host.eq_ignore_ascii_case(host))
+        .map(|account| account.login.clone());
+    let needs_switch = previous_default
+        .as_deref()
+        .is_none_or(|active| !active.eq_ignore_ascii_case(login));
+
+    if needs_switch {
+        gh.switch_active_account(host, login)
+            .await
+            .map_err(ShehataError::Github)?;
+    }
+
+    let outcome = gh.run_passthrough(args).await.map_err(ShehataError::Github);
+
+    if needs_switch {
+        if let Some(active) = previous_default {
+            // Leaving the user's chosen default changed would be worse than
+            // losing a restore error, so the command's own result wins.
+            let _ = gh.switch_active_account(host, &active).await;
+        }
+    }
+
+    outcome
+}
+
+/// Resolve a repository's assigned account, then run one GitHub CLI command
+/// as that account. The database connection is closed before any await.
+pub async fn run_gh_for_repository(
+    gh: &GhRunner,
+    repository_id: &str,
+    args: &[String],
+) -> Result<i32> {
+    let (host, login) = {
+        let db = Database::open_default()?;
+        let repository = queries::find_repository_by_id(&db, repository_id)?
+            .ok_or_else(|| ShehataError::RepositoryNotFound(repository_id.to_string()))?;
+        let account_id = repository
+            .assigned_account_id
+            .ok_or_else(|| ShehataError::RepositoryNotLinked(repository.id.clone()))?;
+        let account = queries::find_account_by_id(&db, account_id)?
+            .ok_or_else(|| ShehataError::RepositoryNotLinked(repository.id.clone()))?;
+        (account.host, account.login)
+    };
+    run_gh_as(gh, &host, &login, args).await
+}
+
 /// Mirror safe account metadata after discovery has completed. A database
 /// hiccup is intentionally non-fatal so it can never hide live gh state.
 pub fn mirror_accounts(db: &Database, accounts: &[AccountInfo]) {

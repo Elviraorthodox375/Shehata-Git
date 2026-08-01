@@ -332,6 +332,29 @@ impl GhRunner {
         Ok(())
     }
 
+    /// Run the GitHub CLI with caller-supplied arguments, attached directly to
+    /// this process's terminal, and return its exit code.
+    ///
+    /// Arguments are passed as an array and never through a shell. This is a
+    /// deliberate command-line-only escape hatch: it is not reachable from the
+    /// desktop app or the MCP server, so an agent cannot use it to run
+    /// arbitrary GitHub CLI commands.
+    pub async fn run_passthrough(&self, args: &[String]) -> Result<i32, GhError> {
+        let mut command = Command::new(&self.gh_path);
+        command
+            .args(args)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit());
+
+        let mut child = command.spawn().map_err(|e| GhError::Spawn(e.to_string()))?;
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| GhError::Spawn(e.to_string()))?;
+        Ok(status.code().unwrap_or(-1))
+    }
+
     /// Fetch a token for one exact account. The token is returned as a secret
     /// and must be dropped by the caller as soon as possible.
     ///

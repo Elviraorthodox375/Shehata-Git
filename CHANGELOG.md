@@ -4,6 +4,16 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.11 - 2026-08-01
+
+### Added
+
+- `shehata gh <command>` runs any GitHub CLI command as the account assigned to
+  the current repository, then restores the previous CLI default. Git already
+  routed per repository; this closes the same gap for `gh` commands such as
+  `gh pr create`. The passthrough is command-line only and is not exposed to
+  the desktop app or the MCP server.
+
 ## 0.1.10 - 2026-08-01
 
 ### Changed
