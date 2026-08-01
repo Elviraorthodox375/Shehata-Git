@@ -5,6 +5,37 @@ Entries are append-only and dated. Nothing is recorded here unless it really hap
 
 ---
 
+## 2026-08-01 — Phase 5 assignment foundation and professional UI refresh
+
+### Repository assignment and local identity
+
+- Added a shared Phase 5 assignment service used by the desktop bridge.
+- Assignment resolves an exact `host + login` from the safe account mirror and refuses unavailable accounts or host mismatches.
+- Creates `<git-dir>/shehata-git/repository-id` without overwriting a conflicting marker.
+- Supports optional repository-local `user.name` and `user.email` changes only; input is trimmed, bounded, and rejects control characters or malformed email addresses.
+- Saves the original local identity values before the first change and preserves those backups across later reassignments.
+- Rolls back identity changes and a newly created marker when a later assignment step fails.
+- Added a real temporary-Git-repository test proving account assignment, marker creation, local identity changes, database persistence, and backup contents.
+
+### Desktop assignment flow
+
+- Added the Tauri assignment command and typed frontend bridge.
+- Repository rows now expose Assign identity / Edit assignment.
+- Added a confirmation dialog that filters accounts by token availability and remote host, shows SSH routing limitations, and makes local-only identity behavior explicit.
+- Successful assignment refreshes the repository route in the UI without exposing credentials.
+
+### Visual redesign
+
+- Reworked the application into a precision desktop-tool aesthetic instead of a generic card dashboard.
+- Added a structured workspace sidebar, local/security status header, technical typography, subtle grid canvas, compact status rails, and shared instrument-panel styling.
+- Redesigned onboarding, Overview, Identities, and Repositories with consistent registry language and responsive layouts.
+- Kept motion restrained and respects the existing reduced-motion rule.
+- Visually verified the rebuilt native app across Overview, Repositories, and Identities. No browser authentication or user-repository assignment was triggered during visual QA.
+- Native debug build completed with `--no-bundle`; no installer was generated.
+- Final repository gate passed: workspace formatting, clippy with warnings denied, all 51 Rust tests, strict TypeScript, 3 frontend tests, and Biome lint.
+
+---
+
 ## 2026-08-01 — Phase 4 repository discovery and native folder picker
 
 ### Repository discovery

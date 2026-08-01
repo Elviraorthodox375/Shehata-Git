@@ -28,6 +28,10 @@ export function addRepository(path: string): Promise<RepositorySummary> {
   return invoke<RepositorySummary>("repositories_add", { path });
 }
 
+export function assignRepository(request: AssignRepositoryRequest): Promise<AssignmentResult> {
+  return invoke<AssignmentResult>("repositories_assign", { request });
+}
+
 export function listAuditEvents(): Promise<AuditEvent[]> {
   return invoke<AuditEvent[]>("audit_list");
 }
@@ -40,4 +44,18 @@ export interface McpInfo {
   executable_path: string | null;
   available: boolean;
   config_snippet: string;
+}
+
+export interface AssignRepositoryRequest {
+  repository_id: string;
+  host: string;
+  login: string;
+  commit_name: string | null;
+  commit_email: string | null;
+}
+
+export interface AssignmentResult {
+  repository: RepositorySummary;
+  marker_path: string;
+  identity_changed: boolean;
 }

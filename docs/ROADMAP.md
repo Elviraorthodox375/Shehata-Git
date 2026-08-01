@@ -36,9 +36,13 @@
 - ✅ Repository dashboard with branch, protocol, remote, and assignment state.
 - Real user-repository selection acceptance is still pending.
 
-## Phase 5 — Assignment & identity ⬜
+## Phase 5 — Assignment & identity 🚧
 
-- Assign account, local-only user.name/email, UUID marker, config backups.
+- ✅ Assign an exact available account with host validation.
+- ✅ Optional local-only `user.name` / `user.email` with original-value backups.
+- ✅ Stable UUID marker under Git metadata with conflict protection.
+- ✅ Desktop review-and-confirm assignment dialog.
+- Real two-account/repository acceptance remains pending owner authentication.
 
 ## Phase 6 — Credential routing vertical slice ⬜
 

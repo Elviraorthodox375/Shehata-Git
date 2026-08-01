@@ -11,7 +11,8 @@ pub mod runner;
 
 pub use remote::{parse_remote_url, RemoteProtocol, RemoteUrl};
 pub use repository::{
-    discover_repository, DiscoveredRepository, RepositoryDiscoveryError, RepositoryRemote,
-    RepositoryRemoteProtocol, WorktreeStatus,
+    discover_repository, read_local_config_values, replace_local_config_values,
+    DiscoveredRepository, RepositoryDiscoveryError, RepositoryRemote, RepositoryRemoteProtocol,
+    WorktreeStatus,
 };
 pub use runner::{CommandOutput, GitError, GitRunner};

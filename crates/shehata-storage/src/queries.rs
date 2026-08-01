@@ -279,6 +279,26 @@ pub fn assign_account(
     Ok(())
 }
 
+pub fn update_repository_assignment_and_identity(
+    db: &Database,
+    repository_id: &str,
+    account_id: i64,
+    commit_name: Option<&str>,
+    commit_email: Option<&str>,
+) -> Result<(), StorageError> {
+    db.connection().execute(
+        "UPDATE repositories SET
+            assigned_account_id = ?1,
+            commit_name = ?2,
+            commit_email = ?3,
+            updated_at = ?4,
+            last_seen_at = ?4
+         WHERE id = ?5",
+        params![account_id, commit_name, commit_email, now(), repository_id],
+    )?;
+    Ok(())
+}
+
 pub fn delete_repository(db: &Database, id: &str) -> Result<(), StorageError> {
     db.connection()
         .execute("DELETE FROM repositories WHERE id = ?1", params![id])?;

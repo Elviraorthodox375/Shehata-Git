@@ -4,6 +4,7 @@
 //! crate. Business logic never lives in command handlers or UI components.
 
 pub mod accounts;
+pub mod assignment;
 pub mod doctor;
 pub mod error;
 pub mod models;

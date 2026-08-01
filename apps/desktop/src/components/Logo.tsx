@@ -60,9 +60,13 @@ interface LogoLockupProps {
 export function LogoLockup({ className, showTagline = false }: LogoLockupProps) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <LogoMark size={36} className="text-primary" />
+      <span className="flex h-9 w-9 items-center justify-center border border-primary/25 bg-primary/[0.06]">
+        <LogoMark size={27} className="text-primary" />
+      </span>
       <div className="flex flex-col">
-        <span className="text-lg font-semibold leading-tight tracking-tight">Shehata Git</span>
+        <span className="font-display text-[1.05rem] font-semibold leading-tight tracking-[-0.025em]">
+          Shehata Git
+        </span>
         {showTagline && (
           <span className="text-xs text-muted-foreground">
             One repo. One identity. Zero switching.

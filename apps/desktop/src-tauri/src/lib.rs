@@ -5,7 +5,10 @@
 //! crosses to the frontend.
 
 use serde::Serialize;
-use shehata_core::{accounts as core_accounts, repositories as core_repositories, Doctor};
+use shehata_core::{
+    accounts as core_accounts, assignment as core_assignment, repositories as core_repositories,
+    Doctor,
+};
 use shehata_github::{GhLoginEvent, GhRunner};
 use shehata_storage::{queries, Database};
 
@@ -82,6 +85,15 @@ async fn repositories_add(path: String) -> Result<core_repositories::RepositoryS
 }
 
 #[tauri::command]
+async fn repositories_assign(
+    request: core_assignment::AssignRepositoryRequest,
+) -> Result<core_assignment::AssignmentResult, String> {
+    core_assignment::assign_repository(request)
+        .await
+        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+}
+
+#[tauri::command]
 fn audit_list() -> Result<Vec<shehata_storage::AuditEventRecord>, String> {
     let db = open_db()?;
     queries::list_audit_events(&db, 200)
@@ -131,6 +143,7 @@ pub fn run() {
             accounts_add,
             repositories_list,
             repositories_add,
+            repositories_assign,
             audit_list,
             mcp_info,
         ])

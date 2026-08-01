@@ -42,39 +42,53 @@ export function AccountsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-lg text-sm leading-relaxed text-muted-foreground">
-          Accounts stay in the official GitHub CLI. Shehata Git only checks which identities are
-          available for repository routing.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-h-11 sm:min-h-8"
-            onClick={() => accounts.refetch()}
-            disabled={accounts.isFetching || login.isPending}
-          >
-            <RefreshCw className={accounts.isFetching ? "animate-spin" : undefined} aria-hidden />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            className="min-h-11 sm:min-h-8"
-            onClick={startLogin}
-            disabled={login.isPending}
-          >
-            <Plus aria-hidden />
-            Add GitHub Account
-          </Button>
+    <div className="mx-auto w-full max-w-6xl space-y-5">
+      <section className="instrument-panel overflow-hidden rounded-[0.75rem]">
+        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="eyebrow">Credential source / official GitHub CLI</p>
+            <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
+              Authenticated identities, without copied tokens.
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+              Accounts remain in the official GitHub CLI store. Shehata Git reads availability and
+              routes repositories to an exact login.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => accounts.refetch()}
+              disabled={accounts.isFetching || login.isPending}
+            >
+              <RefreshCw className={accounts.isFetching ? "animate-spin" : undefined} aria-hidden />
+              Refresh
+            </Button>
+            <Button onClick={startLogin} disabled={login.isPending}>
+              <Plus aria-hidden />
+              Add GitHub Account
+            </Button>
+          </div>
         </div>
-      </div>
+        <div className="grid border-t border-border bg-background/20 sm:grid-cols-3 sm:divide-x sm:divide-border">
+          <IdentityMetric label="DISCOVERED" value={accounts.data?.length ?? 0} />
+          <IdentityMetric
+            label="TOKEN READY"
+            value={accounts.data?.filter((account) => account.token_available).length ?? 0}
+            tone="success"
+          />
+          <IdentityMetric
+            label="NEEDS ATTENTION"
+            value={accounts.data?.filter((account) => !account.token_available).length ?? 0}
+            tone="warning"
+          />
+        </div>
+      </section>
 
       {accounts.isLoading && <p className="text-sm text-muted-foreground">Reading accounts…</p>}
 
       {accounts.isError && (
-        <Card className="border-destructive/40">
+        <Card className="border-destructive/40 bg-destructive/[0.04]">
           <CardHeader>
             <CardTitle className="text-destructive">Could not read accounts</CardTitle>
           </CardHeader>
@@ -85,21 +99,28 @@ export function AccountsPage() {
       )}
 
       {accounts.data?.length === 0 && (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+        <Card className="relative overflow-hidden border-dashed bg-card/45">
+          <span className="absolute left-0 top-0 h-5 w-5 border-l border-t border-primary/50" />
+          <span className="absolute right-0 top-0 h-5 w-5 border-r border-t border-primary/50" />
+          <span className="absolute bottom-0 left-0 h-5 w-5 border-b border-l border-primary/50" />
+          <span className="absolute bottom-0 right-0 h-5 w-5 border-b border-r border-primary/50" />
+          <CardContent className="flex min-h-64 flex-col items-center justify-center gap-4 py-10 text-center">
+            <div className="flex h-14 w-14 items-center justify-center border border-primary/25 bg-primary/[0.07]">
               <UserRound className="h-6 w-6 text-primary" aria-hidden />
             </div>
             <div>
-              <p className="font-medium">No GitHub accounts yet</p>
+              <p className="eyebrow">Identity registry empty</p>
+              <p className="mt-2 font-display text-xl font-semibold">
+                Add your first GitHub account
+              </p>
               <p className="mt-1 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                Add an account to open GitHub&apos;s browser sign-in. Your password and token never
-                enter Shehata Git.
+                Browser authentication runs through GitHub CLI. Your password and token never enter
+                Shehata Git.
               </p>
             </div>
-            <Button className="min-h-11" onClick={startLogin} disabled={login.isPending}>
+            <Button onClick={startLogin} disabled={login.isPending}>
               <Plus aria-hidden />
-              Add your first account
+              Start browser sign-in
             </Button>
           </CardContent>
         </Card>
@@ -107,14 +128,17 @@ export function AccountsPage() {
 
       <div className="grid gap-3">
         {accounts.data?.map((account) => (
-          <Card key={`${account.host}:${account.login}`}>
-            <CardContent className="flex flex-col items-start gap-3 py-4 sm:flex-row sm:items-center">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary">
+          <Card key={`${account.host}:${account.login}`} className="border-l-2 border-l-success">
+            <CardContent className="flex flex-col items-start gap-4 py-4 sm:flex-row sm:items-center">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-border bg-background/35">
                 <UserRound className="h-5 w-5 text-muted-foreground" aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">@{account.login}</p>
-                <p className="font-mono text-xs text-muted-foreground">{account.host}</p>
+                <p className="data-label">AUTHENTICATED IDENTITY</p>
+                <p className="mt-1 truncate font-display font-semibold">@{account.login}</p>
+                <p className="mt-0.5 font-mono text-[0.7rem] text-muted-foreground">
+                  {account.host}
+                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {account.active && <Badge variant="secondary">active in gh</Badge>}
@@ -251,4 +275,31 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return "An unknown error occurred.";
+}
+
+function IdentityMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "success" | "warning";
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-border px-5 py-3 last:border-b-0 sm:border-b-0">
+      <span className="data-label">{label}</span>
+      <span
+        className={
+          tone === "success"
+            ? "font-mono text-lg text-success"
+            : tone === "warning"
+              ? "font-mono text-lg text-warning"
+              : "font-mono text-lg"
+        }
+      >
+        {String(value).padStart(2, "0")}
+      </span>
+    </div>
+  );
 }

@@ -46,6 +46,9 @@ pub enum ShehataError {
     #[error("invalid input: {0}")]
     InvalidInput(String),
 
+    #[error("could not update repository marker: {0}")]
+    RepositoryMarker(String),
+
     // --- wrapped subsystem errors ---
     #[error(transparent)]
     Git(#[from] shehata_git::GitError),
@@ -79,6 +82,7 @@ impl ShehataError {
             Self::NonFastForward => "non_fast_forward",
             Self::OperationBlocked(_) => "operation_blocked",
             Self::InvalidInput(_) => "invalid_input",
+            Self::RepositoryMarker(_) => "repository_marker_error",
             Self::Git(_) => "git_error",
             Self::RepositoryDiscovery(_) => "repository_discovery_error",
             Self::Github(_) => "github_cli_error",

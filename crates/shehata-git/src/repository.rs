@@ -168,7 +168,7 @@ pub async fn discover_repository(
     let commit_name = read_local_config(git, &canonical_path, "user.name").await?;
     let commit_email = read_local_config(git, &canonical_path, "user.email").await?;
     let credential_helpers =
-        read_all_local_config(git, &canonical_path, "credential.helper").await?;
+        read_local_config_values(git, &canonical_path, "credential.helper").await?;
     let credential_use_http_path =
         read_local_config(git, &canonical_path, "credential.useHttpPath")
             .await?
@@ -290,7 +290,7 @@ async fn read_local_config(
     Ok(successful_value(output.success(), &output.stdout))
 }
 
-async fn read_all_local_config(
+pub async fn read_local_config_values(
     git: &GitRunner,
     repo: &Path,
     key: &str,
@@ -308,6 +308,32 @@ async fn read_all_local_config(
         .filter(|line| !line.is_empty())
         .map(str::to_string)
         .collect())
+}
+
+/// Replace every local value for a known-safe Git configuration key.
+/// Callers must validate values before invoking this function.
+pub async fn replace_local_config_values(
+    git: &GitRunner,
+    repo: &Path,
+    key: &str,
+    values: &[String],
+) -> Result<(), GitError> {
+    let unset = git
+        .run_in(Some(repo), &["config", "--local", "--unset-all", key])
+        .await?;
+    // Git exits nonzero when the key did not exist. That is the desired state.
+    if !unset.success() && !unset.stderr.trim().is_empty() {
+        return Err(GitError::Exit {
+            code: unset.code,
+            message: unset.stderr.trim().to_string(),
+        });
+    }
+
+    for value in values {
+        git.run_checked(Some(repo), &["config", "--local", "--add", key, value])
+            .await?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

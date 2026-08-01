@@ -53,22 +53,28 @@ export default {
       },
       fontFamily: {
         sans: [
-          "Inter",
-          "Segoe UI",
+          "Aptos",
+          "Segoe UI Variable Text",
           "system-ui",
           "-apple-system",
           "sans-serif",
         ],
-        mono: ["Cascadia Code", "JetBrains Mono", "Consolas", "monospace"],
+        display: ["Bahnschrift", "Aptos Display", "Segoe UI Variable Display", "sans-serif"],
+        mono: ["Cascadia Mono", "JetBrains Mono", "Consolas", "monospace"],
       },
       keyframes: {
         "fade-in": {
-          from: { opacity: "0", transform: "translateY(4px)" },
+          from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
+        },
+        "scan-in": {
+          from: { opacity: "0", transform: "scaleX(0.92)" },
+          to: { opacity: "1", transform: "scaleX(1)" },
         },
       },
       animation: {
-        "fade-in": "fade-in 150ms ease-out",
+        "fade-in": "fade-in 220ms cubic-bezier(0.22, 1, 0.36, 1)",
+        "scan-in": "scan-in 300ms cubic-bezier(0.22, 1, 0.36, 1)",
       },
     },
   },
