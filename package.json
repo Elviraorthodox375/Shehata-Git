@@ -1,0 +1,22 @@
+{
+  "name": "shehata-git",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One repo. One identity. Zero switching.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm --filter @shehata/desktop tauri dev",
+    "build": "pnpm --filter @shehata/desktop tauri build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:rust": "cargo test --workspace",
+    "fmt:rust": "cargo fmt --all",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.15.9"
+}

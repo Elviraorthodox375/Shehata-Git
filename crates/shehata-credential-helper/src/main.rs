@@ -1,0 +1,181 @@
+//! git-credential-shehata — Git credential helper.
+//!
+//! Invoked by git as: `git-credential-shehata --repo-id <uuid> <operation>`
+//! (git appends the operation after the configured helper string).
+//!
+//! Contract:
+//! - `get`: resolve the repository's assigned account and emit
+//!   `username=` / `password=` on stdout. Nothing else ever touches stdout.
+//! - `store`: no-op — the GitHub CLI remains the credential source of truth.
+//! - `erase`: no-op — credential lifecycle belongs to `gh auth logout`.
+//!
+//! Fail-closed: any missing mapping, account, host mismatch, or token failure
+//! means NO output and a nonzero exit. Diagnostics go to stderr only and
+//! never contain the token.
+
+mod protocol;
+
+use std::io::{Read, Write};
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use secrecy::ExposeSecret;
+use shehata_github::GhRunner;
+use shehata_storage::{queries, Database};
+
+use protocol::{CredentialRequest, MAX_INPUT_BYTES};
+
+fn main() -> ExitCode {
+    init_tracing();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    let repo_id = match parse_repo_id(&args) {
+        Some(id) => id,
+        None => {
+            eprintln!("shehata: missing or invalid --repo-id <uuid> argument");
+            return ExitCode::from(2);
+        }
+    };
+
+    let operation = args
+        .iter()
+        .find(|a| matches!(a.as_str(), "get" | "store" | "erase"));
+
+    match operation.map(String::as_str) {
+        Some("get") => match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(rt) => rt.block_on(handle_get(&repo_id)),
+            Err(_) => ExitCode::from(70),
+        },
+        Some("store") => {
+            // No-op by design: gh stays the source of truth.
+            ExitCode::SUCCESS
+        }
+        Some("erase") => {
+            eprintln!("shehata: erase ignored — sign out with `gh auth logout` if needed");
+            ExitCode::SUCCESS
+        }
+        _ => {
+            eprintln!("shehata: expected one of: get, store, erase");
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn parse_repo_id(args: &[String]) -> Option<String> {
+    let pos = args.iter().position(|a| a == "--repo-id")?;
+    let value = args.get(pos + 1)?;
+    // UUID shape only — this value is later used in a SQL parameter, but
+    // validate anyway: defense in depth.
+    uuid::Uuid::parse_str(value).ok()?;
+    Some(value.clone())
+}
+
+async fn handle_get(repo_id: &str) -> ExitCode {
+    // 1. Read the request from stdin (capped).
+    let mut buffer = Vec::with_capacity(1024);
+    let mut stdin = std::io::stdin().lock();
+    let mut chunk = [0u8; 512];
+    loop {
+        match stdin.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                buffer.extend_from_slice(&chunk[..n]);
+                if buffer.len() > MAX_INPUT_BYTES {
+                    eprintln!("shehata: credential request too large");
+                    return ExitCode::from(65);
+                }
+                // Git terminates the request with a blank line.
+                if buffer.windows(2).any(|w| w == b"\n\n")
+                    || buffer.windows(4).any(|w| w == b"\r\n\r\n")
+                {
+                    break;
+                }
+            }
+            Err(_) => return ExitCode::from(74),
+        }
+    }
+    let Ok(text) = String::from_utf8(buffer) else {
+        eprintln!("shehata: credential request was not UTF-8");
+        return ExitCode::from(65);
+    };
+    let request = CredentialRequest::parse(&text);
+    if !request.is_supported() {
+        eprintln!("shehata: unsupported credential request (need protocol=https and host)");
+        return ExitCode::from(65);
+    }
+    let host = request.host.expect("checked by is_supported");
+
+    // 2. Open the database read-only.
+    let db_path = std::env::var_os("SHEHATA_DB_PATH")
+        .map(PathBuf::from)
+        .or_else(|| Database::default_path().ok());
+    let Some(db_path) = db_path else {
+        eprintln!("shehata: could not locate application database");
+        return ExitCode::from(66);
+    };
+    let Ok(db) = Database::open_read_only(&db_path) else {
+        eprintln!("shehata: application database not found or unreadable");
+        return ExitCode::from(66);
+    };
+
+    // 3. Resolve repository + assignment.
+    let Ok(Some(repo)) = queries::find_repository_by_id(&db, repo_id) else {
+        eprintln!("shehata: repository id not found in database");
+        return ExitCode::from(66);
+    };
+    if repo.host.as_deref() != Some(host.as_str()) {
+        eprintln!("shehata: host mismatch for repository — refusing credentials");
+        return ExitCode::from(65);
+    }
+    let Some(account_id) = repo.assigned_account_id else {
+        eprintln!("shehata: repository has no assigned account");
+        return ExitCode::from(66);
+    };
+    let Ok(Some(account)) = queries::find_account_by_id(&db, account_id) else {
+        eprintln!("shehata: assigned account no longer exists");
+        return ExitCode::from(66);
+    };
+    let login = account.login;
+    if account.host != host {
+        eprintln!("shehata: assigned account host mismatch — refusing credentials");
+        return ExitCode::from(65);
+    }
+
+    // 4. Fetch the token just-in-time from the GitHub CLI.
+    let Ok(gh) = GhRunner::locate() else {
+        eprintln!("shehata: GitHub CLI (gh) not found");
+        return ExitCode::from(69);
+    };
+    let token = match gh.token_for(&host, &login).await {
+        Ok(token) => token,
+        Err(_) => {
+            eprintln!("shehata: could not retrieve token for the assigned account");
+            return ExitCode::from(69);
+        }
+    };
+
+    // 5. Emit credentials on stdout. Nothing else may print here.
+    let mut stdout = std::io::stdout().lock();
+    let output = format!("username={login}\npassword={}\n", token.expose_secret());
+    if stdout.write_all(output.as_bytes()).is_err() || stdout.flush().is_err() {
+        return ExitCode::from(74);
+    }
+    drop(token);
+    ExitCode::SUCCESS
+}
+
+fn init_tracing() {
+    // stderr only, no ANSI, and filterable. Token values must never be logged
+    // by design; redact::redact_github_tokens is the safety net for message
+    // text.
+    let filter = tracing_subscriber::EnvFilter::try_from_env("SHEHATA_LOG")
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .with_ansi(false)
+        .init();
+}

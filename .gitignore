@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Builds & dist
+dist/
+dist-ssr/
+*.local
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Env & secrets — never commit
+.env
+.env.*
+*.pem
+*.key
+
+# Test artifacts
+coverage/
+tmp/

@@ -1,0 +1,29 @@
+[package]
+name = "shehata-mcp"
+description = "shehata-mcp — stdio MCP server exposing safe Shehata Git tools to AI coding agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "shehata-mcp"
+path = "src/main.rs"
+
+[dependencies]
+shehata-core = { path = "../shehata-core" }
+shehata-git = { path = "../shehata-git" }
+shehata-github = { path = "../shehata-github" }
+shehata-storage = { path = "../shehata-storage" }
+
+rmcp = { version = "3.1", features = ["server", "transport-io"] }
+
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process"] }
+
+[dev-dependencies]
+tempfile.workspace = true

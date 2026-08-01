@@ -1,0 +1,59 @@
+/**
+ * Shared TypeScript types mirroring the Rust backend (serde) output.
+ * Keep field names in snake_case to match serde defaults from shehata-core.
+ */
+
+export type CheckStatus = "ready" | "missing" | "needs_attention";
+
+export interface SystemCheck {
+  id: string;
+  label: string;
+  status: CheckStatus;
+  /** Plain-language explanation of what this check means. */
+  detail: string;
+  /** Simple repair instruction shown when the check is not ready. */
+  repair_hint: string | null;
+  version: string | null;
+}
+
+export interface DoctorReport {
+  os: string;
+  app_version: string;
+  healthy: boolean;
+  checks: SystemCheck[];
+}
+
+export interface GhAccount {
+  host: string;
+  login: string;
+  active: boolean;
+  token_available: boolean;
+}
+
+export type GhLoginEvent =
+  | { type: "started" }
+  | { type: "waiting_for_browser" }
+  | { type: "code"; code: string };
+
+export interface RepositorySummary {
+  id: string;
+  display_name: string;
+  canonical_path: string;
+  host: string | null;
+  owner: string | null;
+  repo_name: string | null;
+  current_branch: string | null;
+  assigned_login: string | null;
+  push_policy: string;
+}
+
+export interface AuditEvent {
+  id: number;
+  timestamp: string;
+  repository_id: string | null;
+  event_type: string;
+  account_login: string | null;
+  summary: string;
+  result: string;
+  exit_code: number | null;
+}

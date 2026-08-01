@@ -1,0 +1,27 @@
+[package]
+name = "shehata-cli"
+description = "shehata — command-line interface for Shehata Git"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "shehata"
+path = "src/main.rs"
+
+[dependencies]
+shehata-core = { path = "../shehata-core" }
+shehata-git = { path = "../shehata-git" }
+shehata-github = { path = "../shehata-github" }
+shehata-storage = { path = "../shehata-storage" }
+
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process"] }
+
+[dev-dependencies]
+tempfile.workspace = true

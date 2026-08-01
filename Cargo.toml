@@ -1,0 +1,59 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/shehata-core",
+    "crates/shehata-storage",
+    "crates/shehata-git",
+    "crates/shehata-github",
+    "crates/shehata-cli",
+    "crates/shehata-credential-helper",
+    "crates/shehata-mcp",
+    "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/shehata/shehata-git"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Errors
+thiserror = "2"
+anyhow = "1"
+
+# Logging — never log secrets; see shehata-core::redact
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Data
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+url = "2"
+directories = "6"
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+# Secret handling
+secrecy = { version = "0.10", features = ["serde"] }
+zeroize = "1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Process execution with argument arrays
+tokio-process = { package = "tokio", version = "1", features = ["process"] }
+
+# Dev
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

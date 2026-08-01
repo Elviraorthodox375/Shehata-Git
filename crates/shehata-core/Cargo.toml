@@ -1,0 +1,29 @@
+[package]
+name = "shehata-core"
+description = "Shared business logic for Shehata Git — used by desktop, CLI, credential helper, and MCP server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+shehata-git = { path = "../shehata-git" }
+shehata-github = { path = "../shehata-github" }
+shehata-storage = { path = "../shehata-storage" }
+
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+url.workspace = true
+directories.workspace = true
+secrecy.workspace = true
+zeroize.workspace = true
+which = "8"
+
+tokio = { workspace = true, features = ["process"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,0 +1,66 @@
+# Roadmap
+
+> Status legend: ✅ done · 🚧 in progress · ⬜ planned
+
+## Phase 0 — Environment & research ✅
+
+- Toolchain verified/installed: Git 2.55, gh 2.97, Node 24, pnpm 9.15,
+  Rust 1.97 (MSVC), VS Build Tools, WebView2.
+
+## Phase 1 — Skeleton & branding ✅
+
+- Monorepo: pnpm + Cargo workspaces, Tauri 2 + React 19 + strict TS.
+- Brand: original S-node SVG mark, design tokens, app icons.
+- All 7 Rust crates compile; shared error model with stable codes.
+- Desktop window with full navigation (Home, Accounts, Repositories,
+  AI Integration, Activity, Settings) + first-run onboarding.
+
+## Phase 2 — Doctor ✅
+
+- 8 live system checks (git, gh, accounts, database, helper, WebView2,
+  PATH, MCP) with plain-language repair hints.
+- `shehata doctor` CLI with `--json` and exit code 4 on unhealthy.
+
+## Phase 3 — Accounts ⬜
+
+- Real account cards from `gh auth status --json hosts`.
+- Browser login (`gh auth login --web`) with progress modal.
+- Avatar/profile metadata fetched token-in-backend only.
+
+## Phase 4 — Repositories ⬜
+
+- Native folder picker, worktree validation, remote/branch/status parsing.
+- Repository dashboard.
+
+## Phase 5 — Assignment & identity ⬜
+
+- Assign account, local-only user.name/email, UUID marker, config backups.
+
+## Phase 6 — Credential routing vertical slice ⬜
+
+- Helper configured per repo, `git credential fill` + `ls-remote` green,
+  external push uses assigned account, unlink restores config.
+- **First true product milestone.**
+
+## Phase 7 — Safe Git actions ⬜
+
+- Stage/commit/pull `--ff-only`/push with preflight + audit events.
+
+## Phase 8 — CLI ⬜
+
+- All commands implemented, `--json`, installer/PATH integration.
+
+## Phase 9 — MCP ⬜
+
+- Full tool set live, MCP inspector verified, AGENTS.md generation.
+
+## Phase 10 — Quality & release ⬜
+
+- Test matrix complete, accessibility pass, CI green, NSIS installer,
+  draft release, two-account manual acceptance checklist.
+
+## Explicitly out of scope for v0.1
+
+GitLab/Bitbucket, PR/issue management, merge-conflict editor, cloud sync,
+team credential sharing, mobile, macOS/Linux installers, custom OAuth app,
+any destructive Git command, arbitrary shell execution via MCP.

@@ -1,0 +1,31 @@
+name: Bug report
+description: Something is not working
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Never paste tokens, passwords, or full auth headers here.**
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Output of `shehata doctor` (or the app's System check page). Secrets are stripped by the tool itself.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Shehata Git version
+      placeholder: 0.1.0
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2

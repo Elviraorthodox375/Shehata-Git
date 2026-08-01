@@ -1,0 +1,28 @@
+[package]
+name = "shehata-credential-helper"
+description = "Git credential helper that routes each repository to its assigned GitHub account"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "git-credential-shehata"
+path = "src/main.rs"
+
+[dependencies]
+shehata-core = { path = "../shehata-core" }
+shehata-github = { path = "../shehata-github" }
+shehata-storage = { path = "../shehata-storage" }
+
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+secrecy.workspace = true
+zeroize.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process"] }
+
+[dev-dependencies]
+tempfile.workspace = true
