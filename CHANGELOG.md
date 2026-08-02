@@ -4,6 +4,18 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.16 - 2026-08-02
+
+### Added
+
+- The credential helper (`git-credential-shehata`) now writes a best-effort
+  audit event every time it serves or denies credentials. Any `git push` or
+  `git pull` invoked outside the app — from an IDE, terminal, or AI coding
+  agent — now appears in the audit log. On success a `credential_served` event
+  is recorded; on denial a `credential_denied` event records the specific
+  reason (host mismatch, missing assignment, token failure, etc.). The audit
+  write is fire-and-forget and never blocks the credential flow.
+
 ## 0.1.15 - 2026-08-02
 
 ### Fixed
