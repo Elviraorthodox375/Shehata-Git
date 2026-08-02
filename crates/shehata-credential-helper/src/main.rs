@@ -16,12 +16,13 @@
 mod protocol;
 
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Instant;
 
 use secrecy::ExposeSecret;
 use shehata_github::GhRunner;
-use shehata_storage::{queries, Database};
+use shehata_storage::{queries, Database, NewAuditEvent};
 
 use protocol::{CredentialRequest, MAX_INPUT_BYTES};
 
@@ -74,6 +75,8 @@ fn parse_repo_id(args: &[String]) -> Option<String> {
 }
 
 async fn handle_get(repo_id: &str) -> ExitCode {
+    let started = Instant::now();
+
     // 1. Read the request from stdin (capped).
     let mut buffer = Vec::with_capacity(1024);
     let mut stdin = std::io::stdin().lock();
@@ -124,35 +127,99 @@ async fn handle_get(repo_id: &str) -> ExitCode {
     // 3. Resolve repository + assignment.
     let Ok(Some(repo)) = queries::find_repository_by_id(&db, repo_id) else {
         eprintln!("shehata: repository id not found in database");
+        write_credential_audit(
+            &db_path,
+            repo_id,
+            None,
+            "Credential denied — repository not found",
+            None,
+            "failure",
+            started,
+        );
         return ExitCode::from(66);
     };
+    let display_name = repo.display_name.clone();
     if repo.host.as_deref() != Some(host.as_str()) {
         eprintln!("shehata: host mismatch for repository — refusing credentials");
+        write_credential_audit(
+            &db_path,
+            repo_id,
+            None,
+            "Credential denied — host mismatch",
+            Some(&display_name),
+            "failure",
+            started,
+        );
         return ExitCode::from(65);
     }
     let Some(account_id) = repo.assigned_account_id else {
         eprintln!("shehata: repository has no assigned account");
+        write_credential_audit(
+            &db_path,
+            repo_id,
+            None,
+            "Credential denied — no assigned account",
+            Some(&display_name),
+            "failure",
+            started,
+        );
         return ExitCode::from(66);
     };
     let Ok(Some(account)) = queries::find_account_by_id(&db, account_id) else {
         eprintln!("shehata: assigned account no longer exists");
+        write_credential_audit(
+            &db_path,
+            repo_id,
+            None,
+            "Credential denied — account missing",
+            Some(&display_name),
+            "failure",
+            started,
+        );
         return ExitCode::from(66);
     };
     let login = account.login;
     if account.host != host {
         eprintln!("shehata: assigned account host mismatch — refusing credentials");
+        write_credential_audit(
+            &db_path,
+            repo_id,
+            Some(&login),
+            "Credential denied — account host mismatch",
+            Some(&display_name),
+            "failure",
+            started,
+        );
         return ExitCode::from(65);
     }
 
     // 4. Fetch the token just-in-time from the GitHub CLI.
     let Ok(gh) = GhRunner::locate() else {
         eprintln!("shehata: GitHub CLI (gh) not found");
+        write_credential_audit(
+            &db_path,
+            repo_id,
+            Some(&login),
+            "Credential denied — gh CLI not found",
+            Some(&display_name),
+            "failure",
+            started,
+        );
         return ExitCode::from(69);
     };
     let token = match gh.token_for(&host, &login).await {
         Ok(token) => token,
         Err(_) => {
             eprintln!("shehata: could not retrieve token for the assigned account");
+            write_credential_audit(
+                &db_path,
+                repo_id,
+                Some(&login),
+                "Credential denied — token retrieval failed",
+                Some(&display_name),
+                "failure",
+                started,
+            );
             return ExitCode::from(69);
         }
     };
@@ -164,7 +231,55 @@ async fn handle_get(repo_id: &str) -> ExitCode {
         return ExitCode::from(74);
     }
     drop(token);
+
+    // 6. Record that credentials were served — best effort, never blocks the
+    //    primary credential flow.
+    write_credential_audit(
+        &db_path,
+        repo_id,
+        Some(&login),
+        "Credentials served",
+        Some(&display_name),
+        "success",
+        started,
+    );
     ExitCode::SUCCESS
+}
+
+/// Best-effort audit write. Opens a separate read-write connection so the
+/// primary read-only lookup path is unaffected. If the write fails for any
+/// reason (locked DB, missing file, …) we log to stderr and move on — the
+/// credential helper's job is to serve credentials, not to block on bookkeeping.
+fn write_credential_audit(
+    db_path: &Path,
+    repo_id: &str,
+    account_login: Option<&str>,
+    summary: &str,
+    detail: Option<&str>,
+    result: &str,
+    started: Instant,
+) {
+    let Ok(db) = Database::open_at(db_path) else {
+        eprintln!("shehata: audit write skipped — could not open database");
+        return;
+    };
+    let event = NewAuditEvent {
+        event_type: if result == "success" {
+            "credential_served"
+        } else {
+            "credential_denied"
+        },
+        repository_id: Some(repo_id),
+        account_login,
+        summary,
+        detail,
+        result,
+        exit_code: None,
+        duration_ms: Some(started.elapsed().as_millis().min(i64::MAX as u128) as i64),
+    };
+    if let Err(e) = queries::insert_audit_event(&db, &event) {
+        eprintln!("shehata: audit write failed — {e}");
+    }
 }
 
 fn init_tracing() {

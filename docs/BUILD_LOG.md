@@ -3,6 +3,22 @@
 This file records verified engineering milestones without machine-specific
 paths, account names, repository names, credentials, or private test data.
 
+## 2026-08-02 — v0.1.16 credential helper audit logging
+
+- The credential helper (`git-credential-shehata`) now writes a best-effort
+  audit event every time it serves or denies credentials. This closes a blind
+  spot where `git push` or `git pull` invoked outside the app (from an IDE,
+  terminal, or AI coding agent) would succeed via the helper but never appear
+  in the audit log.
+- On success: a `credential_served` event is recorded with the repository
+  display name and the account login.
+- On denial (host mismatch, missing assignment, token failure, etc.): a
+  `credential_denied` event is recorded with the specific reason.
+- The audit write opens a separate read-write database connection and is
+  fire-and-forget — if it fails, the credential flow is unaffected.
+- Passed full quality gate: `cargo fmt`, Clippy (warnings denied), 78 Rust
+  tests, 7 frontend tests, TypeScript typecheck.
+
 ## 2026-08-01 — Public repository preparation
 
 - Reworked the README, roadmap, contribution guide, security policy, changelog,
