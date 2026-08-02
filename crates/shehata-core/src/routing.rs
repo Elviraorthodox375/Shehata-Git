@@ -219,8 +219,13 @@ pub async fn unlink_repository_at(
     remove_marker(&repository)?;
     {
         let db = Database::open_at(db_path)?;
+        // Only mark backups whose config keys were actually restored.
+        // Identity backups skipped by the user remain pending so they can
+        // be recovered later if needed.
         for backup in &backups {
-            queries::mark_backup_restored(&db, backup.id)?;
+            if restored_keys.contains(&backup.config_key) {
+                queries::mark_backup_restored(&db, backup.id)?;
+            }
         }
         queries::clear_repository_assignment(&db, &repository.id)?;
         queries::insert_audit_event(

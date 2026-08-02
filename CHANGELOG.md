@@ -4,6 +4,41 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.17 - 2026-08-02
+
+### Security
+
+- **Credential helper now enforces exact repository path scoping.** Previously
+  the helper validated only the host; now it compares the requested `path` field
+  against the linked repository's `owner/repo_name`. Missing path data is denied
+  (fail-closed). Requests with embedded credentials in the URL field are also
+  rejected. This closes a credential-routing gap where any git request to the
+  same host could receive the token of a different repository.
+
+- **Remote URLs containing embedded credentials are rejected.** The remote URL
+  parser now refuses `https://user:token@host/...` URLs, query strings,
+  fragments, and extra path segments. The `raw` URL field has been removed from
+  `RemoteUrl`; only a safe `canonical_url()` reconstructed from parsed
+  components is stored. This prevents accidental token persistence in SQLite.
+
+- **Timed-out git and GitHub CLI processes are now killed on drop.** Both
+  process runners set `kill_on_drop(true)`, ensuring that a timed-out push,
+  pull, or authentication command cannot continue executing in the background
+  after the user is told it failed.
+
+- **Unlink backup state is now accurate.** When unlinking with
+  `restore_identity=false`, identity backups (user.name, user.email) are no
+  longer falsely marked as restored. Only actually-restored configuration keys
+  are marked, preserving the ability to recover original values later.
+
+### Added
+
+- Author credit embedded across the project: `Cargo.toml` workspace `authors`
+  field, copyright headers in every crate entry point and the Tauri bridge,
+  `package.json` `author` field, and a visible Author section in the README.
+  These survive forks and ensure the original creator is attributed regardless
+  of how the project is distributed.
+
 ## 0.1.16 - 2026-08-02
 
 ### Added

@@ -12,7 +12,8 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.16"
+version = "0.1.17"
+authors = ["Dr Mohamed Shehata <moshehata95@gmail.com>"]
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/moshehata95/Shehata-Git"

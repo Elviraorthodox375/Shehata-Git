@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Dr Mohamed Shehata. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root.
+
 //! shehata-git — safe wrapper around the system `git` executable.
 //!
 //! Rules enforced here:

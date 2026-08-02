@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Dr Mohamed Shehata. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root.
+
 //! `shehata` — safe command-line access to the same core used by the desktop.
 //!
 //! Human-readable output is the default; `--json` produces stable structured

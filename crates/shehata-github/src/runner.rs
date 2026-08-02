@@ -93,7 +93,8 @@ impl GhRunner {
             .args(args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
         configure_background_process(&mut command);
 
         // Args contain at most a login name — never tokens.

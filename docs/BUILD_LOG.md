@@ -3,6 +3,24 @@
 This file records verified engineering milestones without machine-specific
 paths, account names, repository names, credentials, or private test data.
 
+## 2026-08-02 — v0.1.17 author attribution + security hardening
+
+- Added `authors` field to the workspace `Cargo.toml` — published with every
+  crate and embedded in compiled binary metadata.
+- Added copyright headers to all 8 crate/app entry points (4 lib.rs, 4 main.rs).
+- Added `author` field to the desktop `package.json`.
+- Added an Author section to the README with name, title, and GitHub profile.
+- **P0-1 fix**: Credential helper now validates exact repository path
+  (`owner/repo`) against the linked record, not just the host. Missing path
+  denied (fail-closed). Embedded credentials in the URL field rejected.
+- **P0-2 fix**: Remote URL parser rejects userinfo, query strings, fragments,
+  and extra path segments. `RemoteUrl.raw` field removed; `canonical_url()`
+  reconstructs a safe URL from parsed components only.
+- **P1-1 fix**: Both Git and GitHub CLI process runners set `kill_on_drop(true)`
+  so timed-out child processes are terminated immediately.
+- **P1-2 fix**: Unlink with `restore_identity=false` no longer marks identity
+  backups as restored. Only actually-restored keys are marked.
+
 ## 2026-08-02 — v0.1.16 credential helper audit logging
 
 - The credential helper (`git-credential-shehata`) now writes a best-effort

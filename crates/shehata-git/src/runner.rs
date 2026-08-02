@@ -114,7 +114,8 @@ impl GitRunner {
             .env("GIT_ASKPASS", "echo")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
         configure_background_process(&mut command);
 
         // Never log the environment; args are safe (no tokens allowed by design).

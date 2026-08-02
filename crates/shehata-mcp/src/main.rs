@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Dr Mohamed Shehata. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root.
+
 //! shehata-mcp — stdio MCP server.
 //!
 //! Exposes safe, structured Shehata Git tools to AI coding agents.

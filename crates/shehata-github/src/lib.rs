@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Dr Mohamed Shehata. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root.
+
 //! shehata-github — wrapper around the official GitHub CLI.
 //!
 //! The GitHub CLI is the credential source of truth. This crate:

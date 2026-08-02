@@ -213,6 +213,13 @@ pnpm --filter @shehata/desktop typecheck
 pnpm --filter @shehata/desktop test
 ```
 
+## Author
+
+Created and maintained by **Dr Mohamed Shehata** — Nephrologist | Freelance
+Medical Branding & Marketing Expert | AI Enthusiast.
+
+- GitHub: [@moshehata95](https://github.com/moshehata95)
+
 ## License
 
 Shehata Git is available under the [MIT License](LICENSE).

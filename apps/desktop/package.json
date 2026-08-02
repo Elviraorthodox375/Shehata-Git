@@ -1,6 +1,7 @@
 {
   "name": "@shehata/desktop",
-  "version": "0.1.16",
+  "version": "0.1.17",
+  "author": "Dr Mohamed Shehata",
   "private": true,
   "type": "module",
   "scripts": {

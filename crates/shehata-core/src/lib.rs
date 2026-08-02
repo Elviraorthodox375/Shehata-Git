@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Dr Mohamed Shehata. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root.
+
 //! shehata-core — the shared brain of Shehata Git.
 //!
 //! Desktop (Tauri), CLI, credential helper, and MCP server all call into this

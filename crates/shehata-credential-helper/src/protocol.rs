@@ -50,6 +50,27 @@ impl CredentialRequest {
     pub fn is_supported(&self) -> bool {
         matches!(self.protocol.as_deref(), Some("https")) && self.host.is_some()
     }
+
+    /// Normalize the `path` field for comparison: strip optional `.git` suffix,
+    /// lowercase, and trim leading/trailing slashes.
+    pub fn normalized_repo_path(&self) -> Option<String> {
+        self.path.as_deref().map(|p| {
+            let trimmed = p.trim_matches('/');
+            let stripped = trimmed.strip_suffix(".git").unwrap_or(trimmed);
+            stripped.to_ascii_lowercase()
+        })
+    }
+
+    /// Returns true if the `url` field contains embedded credentials
+    /// (username or password in the URL).
+    pub fn has_embedded_credentials(&self) -> bool {
+        if let Some(ref url_str) = self.url {
+            if let Ok(parsed) = url::Url::parse(url_str) {
+                return !parsed.username().is_empty() || parsed.password().is_some();
+            }
+        }
+        false
+    }
 }
 
 #[cfg(test)]

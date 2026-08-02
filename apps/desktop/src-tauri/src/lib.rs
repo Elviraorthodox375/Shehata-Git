@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Dr Mohamed Shehata. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root.
+
 //! Tauri bridge.
 //!
 //! Command handlers here are THIN: they call shehata-core and serialize the

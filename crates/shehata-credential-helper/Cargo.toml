@@ -21,6 +21,7 @@ secrecy.workspace = true
 zeroize.workspace = true
 uuid.workspace = true
 rusqlite.workspace = true
+url.workspace = true
 
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process"] }
 

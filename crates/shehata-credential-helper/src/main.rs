@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Dr Mohamed Shehata. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root.
+
 //! git-credential-shehata — Git credential helper.
 //!
 //! Invoked by git as: `git-credential-shehata --repo-id <uuid> <operation>`
@@ -109,7 +112,7 @@ async fn handle_get(repo_id: &str) -> ExitCode {
         eprintln!("shehata: unsupported credential request (need protocol=https and host)");
         return ExitCode::from(65);
     }
-    let host = request.host.expect("checked by is_supported");
+    let host = request.host.as_ref().expect("checked by is_supported");
 
     // 2. Open the database read-only.
     let db_path = std::env::var_os("SHEHATA_DB_PATH")
@@ -179,7 +182,7 @@ async fn handle_get(repo_id: &str) -> ExitCode {
         return ExitCode::from(66);
     };
     let login = account.login;
-    if account.host != host {
+    if account.host != *host {
         eprintln!("shehata: assigned account host mismatch — refusing credentials");
         write_credential_audit(
             &db_path,
@@ -191,6 +194,75 @@ async fn handle_get(repo_id: &str) -> ExitCode {
             started,
         );
         return ExitCode::from(65);
+    }
+
+    // 3b. Enforce exact repository path scoping (P0 security fix).
+    //
+    // credential.useHttpPath=true is always set during link, so git sends
+    // `path=owner/repo.git`. We compare the requested path against the
+    // repository record's owner/repo_name. Missing path → deny (fail-closed).
+    {
+        let repo_owner = repo.owner.as_deref().unwrap_or("");
+        let repo_name = repo.repo_name.as_deref().unwrap_or("");
+        if repo_owner.is_empty() || repo_name.is_empty() {
+            eprintln!("shehata: repository record has no owner/name — refusing credentials");
+            write_credential_audit(
+                &db_path,
+                repo_id,
+                Some(&login),
+                "Credential denied — repository identity incomplete",
+                Some(&display_name),
+                "failure",
+                started,
+            );
+            return ExitCode::from(65);
+        }
+        let expected = format!("{}/{}", repo_owner, repo_name).to_ascii_lowercase();
+        let requested = request.normalized_repo_path();
+        match requested {
+            None => {
+                eprintln!("shehata: credential request has no path — refusing (fail-closed)");
+                write_credential_audit(
+                    &db_path,
+                    repo_id,
+                    Some(&login),
+                    "Credential denied — no path in request",
+                    Some(&display_name),
+                    "failure",
+                    started,
+                );
+                return ExitCode::from(65);
+            }
+            Some(ref path) if *path != expected => {
+                eprintln!("shehata: repository path mismatch — refusing credentials");
+                write_credential_audit(
+                    &db_path,
+                    repo_id,
+                    Some(&login),
+                    "Credential denied — repository path mismatch",
+                    Some(&display_name),
+                    "failure",
+                    started,
+                );
+                return ExitCode::from(65);
+            }
+            _ => { /* path matches — proceed */ }
+        }
+
+        // Reject requests with embedded credentials in the url field.
+        if request.has_embedded_credentials() {
+            eprintln!("shehata: credential request URL contains embedded credentials — refusing");
+            write_credential_audit(
+                &db_path,
+                repo_id,
+                Some(&login),
+                "Credential denied — embedded credentials in URL",
+                Some(&display_name),
+                "failure",
+                started,
+            );
+            return ExitCode::from(65);
+        }
     }
 
     // 4. Fetch the token just-in-time from the GitHub CLI.
@@ -207,7 +279,7 @@ async fn handle_get(repo_id: &str) -> ExitCode {
         );
         return ExitCode::from(69);
     };
-    let token = match gh.token_for(&host, &login).await {
+    let token = match gh.token_for(host, &login).await {
         Ok(token) => token,
         Err(_) => {
             eprintln!("shehata: could not retrieve token for the assigned account");

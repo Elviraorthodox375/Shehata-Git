@@ -15,8 +15,18 @@ pub struct RemoteUrl {
     pub owner: String,
     pub repo: String,
     pub protocol: RemoteProtocol,
-    /// The original URL, unchanged.
-    pub raw: String,
+}
+
+impl RemoteUrl {
+    /// Reconstruct a safe canonical URL with no credentials, query, or fragment.
+    pub fn canonical_url(&self) -> String {
+        match self.protocol {
+            RemoteProtocol::Https => {
+                format!("https://{}/{}/{}.git", self.host, self.owner, self.repo)
+            }
+            RemoteProtocol::Ssh => format!("git@{}:{}/{}.git", self.host, self.owner, self.repo),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +47,12 @@ pub enum RemoteParseError {
     BadPath(String),
     #[error("repository owner or name is empty in: {0}")]
     EmptySegment(String),
+    #[error("remote URL contains embedded credentials — remove userinfo before importing")]
+    ContainsCredentials,
+    #[error("remote URL has unsupported query or fragment: {0}")]
+    HasQueryOrFragment(String),
+    #[error("remote URL has extra path segments beyond owner/repo: {0}")]
+    ExtraSegments(String),
 }
 
 /// Parse a Git remote URL. Defensive: trims whitespace, rejects anything
@@ -62,15 +78,27 @@ pub fn parse_remote_url(input: &str) -> Result<RemoteUrl, RemoteParseError> {
     if raw.contains("://") {
         let parsed =
             Url::parse(raw).map_err(|_| RemoteParseError::UnsupportedFormat(raw.to_string()))?;
+
+        // Reject credentials embedded in HTTPS URLs (SSH legitimately uses
+        // git@host syntax, so this check applies to HTTPS only).
+        let protocol = match parsed.scheme() {
+            "https" => {
+                if !parsed.username().is_empty() || parsed.password().is_some() {
+                    return Err(RemoteParseError::ContainsCredentials);
+                }
+                RemoteProtocol::Https
+            }
+            "ssh" | "git+ssh" => RemoteProtocol::Ssh,
+            other => return Err(RemoteParseError::UnsupportedFormat(other.to_string())),
+        };
+        // Reject query strings and fragments.
+        if parsed.query().is_some() || parsed.fragment().is_some() {
+            return Err(RemoteParseError::HasQueryOrFragment(raw.to_string()));
+        }
         let host = parsed
             .host_str()
             .ok_or_else(|| RemoteParseError::NoHost(raw.to_string()))?
             .to_string();
-        let protocol = match parsed.scheme() {
-            "https" => RemoteProtocol::Https,
-            "ssh" | "git+ssh" => RemoteProtocol::Ssh,
-            other => return Err(RemoteParseError::UnsupportedFormat(other.to_string())),
-        };
         let path = parsed.path().trim_start_matches('/');
         return build(raw, host, path, protocol);
     }
@@ -93,12 +121,15 @@ fn build(
             if owner.is_empty() || repo.is_empty() {
                 return Err(RemoteParseError::EmptySegment(raw.to_string()));
             }
+            // Reject extra path segments beyond owner/repo.
+            if segments.next().is_some() {
+                return Err(RemoteParseError::ExtraSegments(raw.to_string()));
+            }
             Ok(RemoteUrl {
                 host,
                 owner: owner.to_string(),
                 repo: repo.to_string(),
                 protocol,
-                raw: raw.to_string(),
             })
         }
         _ => Err(RemoteParseError::BadPath(raw.to_string())),
@@ -167,5 +198,57 @@ mod tests {
     #[test]
     fn rejects_missing_repo() {
         assert!(parse_remote_url("https://github.com/owner").is_err());
+    }
+
+    #[test]
+    fn rejects_username_in_url() {
+        assert!(matches!(
+            parse_remote_url("https://user@github.com/owner/repo.git"),
+            Err(RemoteParseError::ContainsCredentials)
+        ));
+    }
+
+    #[test]
+    fn rejects_password_in_url() {
+        assert!(matches!(
+            parse_remote_url("https://user:token@github.com/owner/repo.git"),
+            Err(RemoteParseError::ContainsCredentials)
+        ));
+    }
+
+    #[test]
+    fn rejects_query_string() {
+        assert!(matches!(
+            parse_remote_url("https://github.com/owner/repo.git?ref=main"),
+            Err(RemoteParseError::HasQueryOrFragment(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_fragment() {
+        assert!(matches!(
+            parse_remote_url("https://github.com/owner/repo.git#readme"),
+            Err(RemoteParseError::HasQueryOrFragment(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_extra_path_segments() {
+        assert!(matches!(
+            parse_remote_url("https://github.com/owner/repo/extra/path"),
+            Err(RemoteParseError::ExtraSegments(_))
+        ));
+    }
+
+    #[test]
+    fn canonical_url_is_safe() {
+        let r = parse_remote_url("https://github.com/owner/repo.git").unwrap();
+        assert_eq!(r.canonical_url(), "https://github.com/owner/repo.git");
+    }
+
+    #[test]
+    fn canonical_url_for_ssh() {
+        let r = parse_remote_url("git@github.com:owner/repo.git").unwrap();
+        assert_eq!(r.canonical_url(), "git@github.com:owner/repo.git");
     }
 }
