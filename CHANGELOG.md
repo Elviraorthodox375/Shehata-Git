@@ -4,6 +4,38 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.21 - 2026-08-03
+
+### Changed
+
+- **A repository now has two push policies instead of three.** The third,
+  "Require approval", promised to ask a human for a decision - but there was
+  nowhere to answer, so for a coding agent it simply refused, which is exactly
+  what blocking does. A setting that describes itself as asking while it is
+  really blocking is worse than no setting at all.
+
+  Repositories already set to it keep the behaviour they had: they are read as
+  **Block AI push**, and saving re-records them under that name. No repository
+  becomes more permissive on upgrade.
+
+- **`--yes` on `shehata push` is no longer a gate.** A push typed at a terminal
+  is already a human action. The flag is still accepted so existing scripts
+  keep working, and it now reads as an explicit confirmation rather than a
+  requirement.
+
+### Removed
+
+- The `approval_required` error code, which is no longer reachable.
+
+### Note on direction
+
+An approval queue for agent pushes was considered and deliberately not built.
+This tool exists so automation can run with the right identity; its safety
+comes from making dangerous operations impossible - force push, destructive
+reset, and remote deletion are absent from the code, routing fails closed, and
+every action is recorded - not from interrupting safe ones. A prompt in the
+middle of an automated flow would work against the reason the tool exists.
+
 ## 0.1.20 - 2026-08-03
 
 ### Added

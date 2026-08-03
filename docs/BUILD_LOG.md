@@ -3,6 +3,33 @@
 This file records verified engineering milestones without machine-specific
 paths, account names, repository names, credentials, or private test data.
 
+## 2026-08-03 - v0.1.21 honest push policies
+
+- Reduced `PushPolicy` to `AllowNormalPush` and `BlockAiPush`. `parse()` still
+  accepts the retired `ask_before_push` and maps it to `BlockAiPush`, so old
+  rows load and old behaviour is preserved without a data migration.
+- `enforce_push_policy` no longer has an approval branch. The `approved`
+  argument is kept in the signature because a human confirming at their own
+  keyboard is meaningful, but it can never grant an agent access the policy
+  denies - a test now asserts exactly that.
+- Removed the `ApprovalRequired` error variant and its CLI repair hint; both
+  were unreachable once the policy was gone.
+- Removed the third option from both policy selects in the desktop, and made
+  `normalizePushPolicy` fold the retired value into `block_ai_push`.
+- Merged the two credential-helper environment tests into one. They both drove
+  the same process-wide variable and raced under the parallel test runner - a
+  reminder that a test touching global state cannot be split for readability.
+
+### Design note
+
+The phase plan called for a full approval workflow here: a `pending_approvals`
+table, expiry, single-use nonces, and a desktop approval card. Work on it was
+started and then reversed after checking it against what the product is for.
+Shehata Git exists so automation runs with the correct identity. Its safety
+model is structural - the dangerous operations do not exist in the code - and
+adding a human prompt into an automated push contradicts that. What remained
+worth doing was removing the setting that lied about it.
+
 ## 2026-08-03 - v0.1.20 operation safety
 
 - Added `locking`: a per-repository async mutex registry. `try_lock_repository`

@@ -25,9 +25,6 @@ pub enum ShehataError {
     #[error("authentication failed for the assigned account")]
     AuthenticationFailed,
 
-    #[error("this repository requires approval before pushing")]
-    ApprovalRequired,
-
     #[error("repository has unresolved merge conflicts")]
     ConflictsPresent,
 
@@ -87,7 +84,6 @@ impl ShehataError {
             Self::AccountNotAvailable { .. } => "account_not_available",
             Self::CredentialHelperMissing => "credential_helper_missing",
             Self::AuthenticationFailed => "authentication_failed",
-            Self::ApprovalRequired => "approval_required",
             Self::ConflictsPresent => "conflicts_present",
             Self::DetachedHead => "detached_head",
             Self::NoUpstream => "no_upstream",
@@ -132,7 +128,6 @@ mod tests {
             ShehataError::RepositoryNotFound("x".into()).code(),
             "repository_not_found"
         );
-        assert_eq!(ShehataError::ApprovalRequired.code(), "approval_required");
         assert_eq!(ShehataError::NonFastForward.code(), "non_fast_forward");
         assert_eq!(
             ShehataError::OperationBlocked("force push".into()).code(),

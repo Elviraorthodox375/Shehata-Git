@@ -115,11 +115,20 @@ pub struct AccountInfo {
 }
 
 /// Push policies for a repository.
+///
+/// There are deliberately only two. A third policy, `ask_before_push`, used to
+/// exist and promised to ask a human for a decision — but there was nowhere to
+/// answer, so for a coding agent it simply refused, exactly like blocking. A
+/// setting that describes itself as asking while it is really blocking is
+/// worse than no setting at all, so it now resolves to `BlockAiPush`.
+///
+/// This tool's job is to make the dangerous operations impossible rather than
+/// to interrupt the safe ones: force push, destructive reset, and the rest are
+/// absent from the code, and routing fails closed. Automation keeps working.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PushPolicy {
     AllowNormalPush,
-    AskBeforePush,
     BlockAiPush,
 }
 
@@ -127,7 +136,6 @@ impl PushPolicy {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::AllowNormalPush => "allow_normal_push",
-            Self::AskBeforePush => "ask_before_push",
             Self::BlockAiPush => "block_ai_push",
         }
     }
@@ -135,8 +143,9 @@ impl PushPolicy {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "allow_normal_push" => Some(Self::AllowNormalPush),
-            "ask_before_push" => Some(Self::AskBeforePush),
-            "block_ai_push" => Some(Self::BlockAiPush),
+            // Retired name, kept so an existing repository keeps the behaviour
+            // it already had instead of failing to load.
+            "block_ai_push" | "ask_before_push" => Some(Self::BlockAiPush),
             _ => None,
         }
     }
@@ -148,13 +157,19 @@ mod tests {
 
     #[test]
     fn push_policy_roundtrip() {
-        for policy in [
-            PushPolicy::AllowNormalPush,
-            PushPolicy::AskBeforePush,
-            PushPolicy::BlockAiPush,
-        ] {
+        for policy in [PushPolicy::AllowNormalPush, PushPolicy::BlockAiPush] {
             assert_eq!(PushPolicy::parse(policy.as_str()), Some(policy));
         }
         assert_eq!(PushPolicy::parse("force_push"), None);
+    }
+
+    #[test]
+    fn the_retired_ask_policy_keeps_its_real_behaviour() {
+        // It refused agent pushes in practice, so it must keep refusing them
+        // rather than silently becoming permissive on upgrade.
+        assert_eq!(
+            PushPolicy::parse("ask_before_push"),
+            Some(PushPolicy::BlockAiPush)
+        );
     }
 }

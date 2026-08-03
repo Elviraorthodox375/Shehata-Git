@@ -61,7 +61,8 @@ enum Commands {
     Push {
         /// Repository path (defaults to the current directory).
         path: Option<String>,
-        /// Approve a repository whose policy is `ask_before_push`.
+        /// Confirm the push explicitly. Kept for existing scripts; a push
+        /// from the command line is already a human action.
         #[arg(long)]
         yes: bool,
     },
@@ -684,9 +685,6 @@ fn fail(json: bool, error: &ShehataError) -> u8 {
         );
     } else {
         eprintln!("error [{}]: {}", error.code(), safe_text(&message));
-        if matches!(error, ShehataError::ApprovalRequired) {
-            eprintln!("repair: review the push, then rerun with --yes");
-        }
     }
     EXIT_FAILURE
 }

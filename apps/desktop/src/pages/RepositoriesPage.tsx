@@ -814,7 +814,6 @@ function GitActionsDialog({ repo, onClose }: { repo: RepositorySummary; onClose:
               className="h-9 rounded-[0.45rem] border border-input bg-background/60 px-3 text-xs font-medium outline-none focus:border-primary"
             >
               <option value="allow_normal_push">Allow normal push</option>
-              <option value="ask_before_push">Require approval</option>
               <option value="block_ai_push">Block AI push</option>
             </select>
           </label>
@@ -890,7 +889,10 @@ function isStaged(change: RepositoryActionStatus["changes"][number]): boolean {
 }
 
 function normalizePushPolicy(value: string): PushPolicy {
-  if (value === "ask_before_push" || value === "block_ai_push") return value;
+  // `ask_before_push` was retired: it described asking but always refused an
+  // agent, which is what blocking does. Existing repositories keep that
+  // behaviour under the name that is true.
+  if (value === "block_ai_push" || value === "ask_before_push") return "block_ai_push";
   return "allow_normal_push";
 }
 

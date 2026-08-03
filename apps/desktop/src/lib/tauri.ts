@@ -151,7 +151,7 @@ export function pushRepository(repositoryId: string): Promise<NetworkActionResul
   });
 }
 
-export type PushPolicy = "allow_normal_push" | "ask_before_push" | "block_ai_push";
+export type PushPolicy = "allow_normal_push" | "block_ai_push";
 
 export function setRepositoryPushPolicy(
   repositoryId: string,

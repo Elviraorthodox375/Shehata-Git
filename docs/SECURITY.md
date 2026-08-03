@@ -57,6 +57,17 @@ values are backed up before a change and restored exactly during unlink.
 Repository operations never change the GitHub CLI default account. A user may
 change that default through a separate, explicit, confirmed account action.
 
+## Push policies
+
+A repository is either **Allow normal push** (humans and coding agents may
+push) or **Block AI push** (humans may push, agents may not). There is no
+"ask" state: this tool is built so automation can run, and its safety comes
+from the operations that do not exist in the code rather than from prompting
+during a flow that is meant to be unattended.
+
+A caller's own confirmation - the desktop push dialog, or `--yes` on the CLI -
+never grants an agent access that the policy denies.
+
 ## Diff previews
 
 Preview is the one place where file *contents* could reach the UI, the activity

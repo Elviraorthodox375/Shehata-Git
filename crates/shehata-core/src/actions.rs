@@ -971,14 +971,19 @@ fn parse_ahead_behind(value: &str) -> Result<(usize, usize)> {
     Ok((ahead, behind))
 }
 
+/// Decide whether this caller may push to this repository.
+///
+/// `approved` is the caller's own confirmation — the desktop's push dialog or
+/// the CLI's `--yes`. It is kept in the signature because a human confirming
+/// at their own keyboard is meaningful, but it never grants an agent access
+/// that the policy denies.
 fn enforce_push_policy(policy: &str, caller: ActionCaller, approved: bool) -> Result<()> {
+    let _ = approved;
     let policy = PushPolicy::parse(policy).ok_or_else(|| {
         ShehataError::OperationBlocked("repository push policy is invalid".to_string())
     })?;
     match policy {
         PushPolicy::AllowNormalPush => Ok(()),
-        PushPolicy::AskBeforePush if approved => Ok(()),
-        PushPolicy::AskBeforePush => Err(ShehataError::ApprovalRequired),
         PushPolicy::BlockAiPush if caller == ActionCaller::Mcp => Err(
             ShehataError::OperationBlocked("AI pushes are blocked for this repository".to_string()),
         ),
@@ -1637,11 +1642,13 @@ mod tests {
     #[test]
     fn enforces_push_policies_by_caller_and_approval() {
         assert!(enforce_push_policy("allow_normal_push", ActionCaller::Mcp, false).is_ok());
-        assert!(matches!(
-            enforce_push_policy("ask_before_push", ActionCaller::Desktop, false),
-            Err(ShehataError::ApprovalRequired)
-        ));
-        assert!(enforce_push_policy("ask_before_push", ActionCaller::Desktop, true).is_ok());
+        // A caller cannot approve its own way past a block.
+        assert!(enforce_push_policy("block_ai_push", ActionCaller::Mcp, true).is_err());
+        // The retired policy keeps refusing agents after the upgrade.
+        assert!(enforce_push_policy("ask_before_push", ActionCaller::Mcp, true).is_err());
+        assert!(enforce_push_policy("ask_before_push", ActionCaller::Cli, false).is_ok());
+        // A human at their own keyboard is never gated by the policy.
+        assert!(enforce_push_policy("ask_before_push", ActionCaller::Desktop, false).is_ok());
         assert!(matches!(
             enforce_push_policy("block_ai_push", ActionCaller::Mcp, true),
             Err(ShehataError::OperationBlocked(_))
@@ -1660,14 +1667,16 @@ mod tests {
             },
         )
         .unwrap();
-        assert_eq!(result.push_policy, "ask_before_push");
+        // The retired name is accepted and stored under the name that
+        // describes what it actually does.
+        assert_eq!(result.push_policy, "block_ai_push");
         let db = Database::open_at(&db_path).unwrap();
         assert_eq!(
             queries::find_repository_by_id(&db, &id)
                 .unwrap()
                 .unwrap()
                 .push_policy,
-            "ask_before_push"
+            "block_ai_push"
         );
         assert!(set_push_policy_at(
             &db_path,

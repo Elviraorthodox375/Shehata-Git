@@ -579,31 +579,25 @@ mod tests {
         );
     }
 
-    /// The env override must never win in a release build, and must never
-    /// accept a file that is not actually our helper.
+    /// Helper discovery is one test, not two: both cases drive the same
+    /// process-wide environment variable, and parallel tests would race.
     #[test]
-    fn helper_discovery_refuses_a_foreign_binary_from_the_environment() {
+    fn helper_discovery_refuses_impostors_and_release_overrides() {
         let temp = TempDir::new().unwrap();
+
         let impostor = temp.path().join("evil.exe");
         std::fs::write(&impostor, b"not the helper").unwrap();
-
-        // Even with the override allowed, a wrong file name is rejected.
-        temp_env_var("SHEHATA_HELPER_PATH", impostor.to_str().unwrap(), || {
+        with_env_var("SHEHATA_HELPER_PATH", impostor.to_str().unwrap(), || {
             let resolved = locate_helper_with(true);
             assert!(
                 resolved.as_ref().map(|p| p != &impostor).unwrap_or(true),
                 "a binary named evil.exe must never be accepted as the helper"
             );
         });
-    }
 
-    #[test]
-    fn helper_discovery_ignores_the_environment_when_overrides_are_disabled() {
-        let temp = TempDir::new().unwrap();
         let planted = temp.path().join(HELPER_FILE_NAME);
         std::fs::write(&planted, b"planted").unwrap();
-
-        temp_env_var("SHEHATA_HELPER_PATH", planted.to_str().unwrap(), || {
+        with_env_var("SHEHATA_HELPER_PATH", planted.to_str().unwrap(), || {
             // Release behaviour: the override is not consulted at all.
             let resolved = locate_helper_with(false);
             assert!(
@@ -615,10 +609,10 @@ mod tests {
         });
     }
 
-    fn temp_env_var(key: &str, value: &str, body: impl FnOnce()) {
+    fn with_env_var(key: &str, value: &str, body: impl FnOnce()) {
         let previous = std::env::var_os(key);
-        // SAFETY: these tests are single-threaded around the variable they set
-        // and always restore the previous value before returning.
+        // SAFETY: only this test touches the variable, and the previous value
+        // is restored before returning.
         unsafe { std::env::set_var(key, value) };
         body();
         match previous {
