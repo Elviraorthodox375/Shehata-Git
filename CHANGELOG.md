@@ -4,6 +4,26 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.19 - 2026-08-03
+
+### Security
+
+- One redaction routine now guards every boundary. It covers GitHub token
+  prefixes, URL userinfo (`https://user:secret@host/...`), `Authorization:`
+  values for the `Bearer`, `Basic`, and `token` schemes, and PEM private key
+  blocks - while deliberately leaving commit SHAs, branches, and repository
+  paths readable so errors stay actionable.
+- The CLI and the MCP server now redact their error output. Both previously
+  emitted error text verbatim; the MCP path matters most, because a coding
+  agent copies tool output into its own context and logs.
+- MCP repository results use a narrower projection than the desktop app: no
+  absolute filesystem path (which contains the local user name), no raw remote
+  URL (where legacy embedded credentials live), and no commit author email.
+- Credential helper discovery is hardened. The resolved path is written into a
+  repository's git config as a `!` command, so release builds now ignore the
+  `SHEHATA_HELPER_PATH` override entirely, every candidate must have the
+  expected file name, and a `PATH` fallback is logged as a warning.
+
 ## 0.1.18 - 2026-08-03
 
 ### Changed

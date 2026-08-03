@@ -64,10 +64,30 @@ shell execution are not implemented.
 
 ## Logs, diagnostics, and MCP
 
-Errors are passed through GitHub-token redaction before display. Activity events
-contain summaries and outcomes, not tokens or file contents. Safe diagnostics
-exclude account names, repository paths, remotes, environment values, and
-credentials. MCP responses use structured envelopes and never return tokens.
+Every text that leaves the core - desktop error, CLI message, MCP envelope,
+activity entry - passes through one redaction routine first. It removes GitHub
+token prefixes (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`, which
+GitHub Enterprise Server shares), URL userinfo (`https://user:secret@host/...`),
+`Authorization:` values including `Bearer`, `Basic`, and `token` schemes, and
+PEM private key blocks. It deliberately leaves commit SHAs, branches, hosts, and
+repository paths readable, because an error that hides those is not actionable.
+
+Activity events contain summaries and outcomes, not tokens or file contents.
+Safe diagnostics exclude account names, repository paths, remotes, environment
+values, and credentials.
+
+MCP responses use structured envelopes, never return tokens, and carry a
+narrower repository projection than the desktop app: no absolute filesystem
+path (which contains the local user name), no raw remote URL (where legacy
+embedded credentials live), and no commit author email. An MCP client copies
+tool output into its own model context and logs, so that surface is minimised
+by construction rather than by redaction alone.
+
+The credential helper path written into a repository's git config runs on every
+authenticated git operation. Release builds therefore resolve it only from the
+binary shipped beside the application, falling back to `PATH` with a warning;
+the `SHEHATA_HELPER_PATH` override is available in debug builds only, and every
+discovery path checks the expected file name.
 
 ## Vulnerability reporting
 

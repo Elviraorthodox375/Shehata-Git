@@ -32,7 +32,7 @@ struct McpInfo {
 }
 
 fn open_db() -> Result<Database, String> {
-    Database::open_default().map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+    Database::open_default().map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -46,7 +46,7 @@ async fn prerequisites_install(
 ) -> Result<core_prerequisites::InstallPrerequisitesResult, String> {
     core_prerequisites::install_prerequisites(request)
         .await
-        .map_err(|error| shehata_core::redact::redact_github_tokens(&error.to_string()))
+        .map_err(|error| shehata_core::redact::redact_secrets(&error.to_string()))
 }
 
 #[tauri::command]
@@ -56,11 +56,11 @@ fn prerequisites_available() -> bool {
 
 #[tauri::command]
 async fn accounts_list() -> Result<Vec<shehata_core::AccountInfo>, String> {
-    let gh = GhRunner::locate()
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let gh =
+        GhRunner::locate().map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     let accounts = core_accounts::list_accounts(&gh)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     if let Ok(db) = open_db() {
         core_accounts::mirror_accounts(&db, &accounts);
     }
@@ -72,8 +72,8 @@ async fn accounts_add(
     cancellation: tauri::State<'_, LoginCancellation>,
     on_event: tauri::ipc::Channel<GhLoginEvent>,
 ) -> Result<Vec<shehata_core::AccountInfo>, String> {
-    let gh = GhRunner::locate()
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let gh =
+        GhRunner::locate().map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     let progress = on_event.clone();
     let (cancel_tx, cancel_rx) = oneshot::channel();
     if let Ok(mut pending) = cancellation.0.lock() {
@@ -94,11 +94,11 @@ async fn accounts_add(
     if let Ok(mut pending) = cancellation.0.lock() {
         pending.take();
     }
-    login_result.map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    login_result.map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
 
     let accounts = core_accounts::list_accounts(&gh)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     if let Ok(db) = open_db() {
         core_accounts::mirror_accounts(&db, &accounts);
     }
@@ -119,11 +119,11 @@ fn accounts_cancel_login(cancellation: tauri::State<'_, LoginCancellation>) -> b
 async fn accounts_remove(
     request: core_accounts::RemoveAccountRequest,
 ) -> Result<Vec<shehata_core::AccountInfo>, String> {
-    let gh = GhRunner::locate()
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let gh =
+        GhRunner::locate().map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     let accounts = core_accounts::remove_account(&gh, &request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     if let Ok(db) = open_db() {
         core_accounts::mirror_accounts(&db, &accounts);
     }
@@ -134,11 +134,11 @@ async fn accounts_remove(
 async fn accounts_switch(
     request: core_accounts::SwitchAccountRequest,
 ) -> Result<Vec<shehata_core::AccountInfo>, String> {
-    let gh = GhRunner::locate()
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let gh =
+        GhRunner::locate().map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     let accounts = core_accounts::switch_active_account(&gh, &request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     if let Ok(db) = open_db() {
         core_accounts::mirror_accounts(&db, &accounts);
     }
@@ -151,8 +151,8 @@ async fn accounts_grant_scope(
     request: core_accounts::GrantScopeRequest,
     on_event: tauri::ipc::Channel<GhLoginEvent>,
 ) -> Result<Vec<shehata_core::AccountInfo>, String> {
-    let gh = GhRunner::locate()
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let gh =
+        GhRunner::locate().map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     let progress = on_event.clone();
     let (cancel_tx, cancel_rx) = oneshot::channel();
     if let Ok(mut pending) = cancellation.0.lock() {
@@ -172,8 +172,7 @@ async fn accounts_grant_scope(
     if let Ok(mut pending) = cancellation.0.lock() {
         pending.take();
     }
-    let accounts =
-        result.map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+    let accounts = result.map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     if let Ok(db) = open_db() {
         core_accounts::mirror_accounts(&db, &accounts);
     }
@@ -184,19 +183,19 @@ async fn accounts_grant_scope(
 async fn repositories_list() -> Result<Vec<core_repositories::RepositorySummary>, String> {
     core_repositories::list_repository_summaries_with_routing()
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
 async fn repositories_add(path: String) -> Result<core_repositories::RepositorySummary, String> {
     let discovered = core_repositories::discover_selected_repository(&path)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     let db = open_db()?;
     let saved = core_repositories::save_discovered_repository(&db, &discovered)
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))?;
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))?;
     core_repositories::repository_summary(&db, saved)
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -205,7 +204,7 @@ async fn repositories_assign(
 ) -> Result<core_assignment::AssignmentResult, String> {
     core_assignment::assign_repository(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -214,7 +213,7 @@ async fn repositories_link(
 ) -> Result<core_routing::RoutingResult, String> {
     core_routing::link_repository(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -223,7 +222,7 @@ async fn repositories_test(
 ) -> Result<core_routing::ConnectionTestResult, String> {
     core_routing::test_connection(&repository_id)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -232,7 +231,7 @@ async fn repositories_unlink(
 ) -> Result<core_routing::UnlinkResult, String> {
     core_routing::unlink_repository(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -241,7 +240,7 @@ async fn repositories_status(
 ) -> Result<core_actions::RepositoryActionStatus, String> {
     core_actions::status(&repository_id)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -250,7 +249,7 @@ async fn repositories_file_diff(
 ) -> Result<core_actions::FileDiff, String> {
     core_actions::file_diff(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -259,7 +258,7 @@ async fn repositories_sync_preview(
 ) -> Result<core_actions::SyncPreview, String> {
     core_actions::sync_preview(&repository_id)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -268,7 +267,7 @@ async fn repositories_stage(
 ) -> Result<core_actions::GitActionResult, String> {
     core_actions::stage(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -277,7 +276,7 @@ async fn repositories_unstage(
 ) -> Result<core_actions::GitActionResult, String> {
     core_actions::unstage(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -286,7 +285,7 @@ async fn repositories_commit(
 ) -> Result<core_actions::GitActionResult, String> {
     core_actions::commit(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -295,7 +294,7 @@ async fn repositories_pull(
 ) -> Result<core_actions::NetworkActionResult, String> {
     core_actions::pull_ff_only(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -304,7 +303,7 @@ async fn repositories_push(
 ) -> Result<core_actions::NetworkActionResult, String> {
     core_actions::push(request)
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -312,28 +311,27 @@ fn repositories_set_push_policy(
     request: core_actions::SetPushPolicyRequest,
 ) -> Result<core_actions::PushPolicyResult, String> {
     core_actions::set_push_policy(request)
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
 fn audit_list() -> Result<Vec<shehata_storage::AuditEventRecord>, String> {
     let db = open_db()?;
     shehata_storage::queries::list_audit_events(&db, 200)
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
 fn audit_delete(id: i64) -> Result<bool, String> {
     let db = open_db()?;
     core_audit::delete_event(&db, id)
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
 fn audit_clear() -> Result<usize, String> {
     let db = open_db()?;
-    core_audit::clear_history(&db)
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+    core_audit::clear_history(&db).map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -360,7 +358,7 @@ fn mcp_info() -> McpInfo {
 async fn diagnostics_report() -> Result<shehata_core::diagnostics::SafeDiagnosticReport, String> {
     shehata_core::diagnostics::safe_diagnostic_report()
         .await
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 #[tauri::command]
@@ -368,7 +366,7 @@ fn repositories_generate_agents(
     request: core_agents::GenerateAgentsRequest,
 ) -> Result<core_agents::GenerateAgentsResult, String> {
     core_agents::generate_agents(request)
-        .map_err(|e| shehata_core::redact::redact_github_tokens(&e.to_string()))
+        .map_err(|e| shehata_core::redact::redact_secrets(&e.to_string()))
 }
 
 fn locate_mcp_binary() -> Option<std::path::PathBuf> {

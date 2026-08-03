@@ -12,7 +12,7 @@ use std::process::{ExitCode, Stdio};
 use clap::{Parser, Subcommand};
 use serde::Serialize;
 use shehata_core::{
-    accounts as core_accounts, actions as core_actions, assignment as core_assignment,
+    accounts as core_accounts, actions as core_actions, assignment as core_assignment, redact,
     repositories as core_repositories, routing as core_routing, Doctor, ShehataError,
 };
 use shehata_github::GhRunner;
@@ -676,17 +676,14 @@ fn print_json<T: Serialize>(value: &T) -> Result<(), u8> {
 }
 
 fn fail(json: bool, error: &ShehataError) -> u8 {
+    let message = redact::redact_secrets(&error.to_string());
     if json {
         println!(
             "{}",
-            serde_json::json!({ "error": { "code": error.code(), "message": error.to_string() } })
+            serde_json::json!({ "error": { "code": error.code(), "message": message } })
         );
     } else {
-        eprintln!(
-            "error [{}]: {}",
-            error.code(),
-            safe_text(&error.to_string())
-        );
+        eprintln!("error [{}]: {}", error.code(), safe_text(&message));
         if matches!(error, ShehataError::ApprovalRequired) {
             eprintln!("repair: review the push, then rerun with --yes");
         }
@@ -699,17 +696,20 @@ fn fail_message(json: bool, code: &str, error: &impl std::fmt::Display) -> u8 {
 }
 
 fn fail_message_text(json: bool, code: &str, message: &str) -> u8 {
+    let message = redact::redact_secrets(message);
     if json {
         println!(
             "{}",
             serde_json::json!({ "error": { "code": code, "message": message } })
         );
     } else {
-        eprintln!("error [{}]: {}", safe_text(code), safe_text(message));
+        eprintln!("error [{}]: {}", safe_text(code), safe_text(&message));
     }
     EXIT_FAILURE
 }
 
+/// Escape control characters so a hostile remote message cannot rewrite the
+/// terminal. Secret redaction happens before this, never instead of it.
 fn safe_text(value: &str) -> String {
     let mut safe = String::with_capacity(value.len());
     for character in value.chars() {

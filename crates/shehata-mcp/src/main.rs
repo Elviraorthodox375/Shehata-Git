@@ -18,7 +18,7 @@ use rmcp::{
 };
 use serde::{Deserialize, Serialize};
 use shehata_core::{
-    accounts as core_accounts, actions as core_actions, repositories as core_repositories,
+    accounts as core_accounts, actions as core_actions, redact, repositories as core_repositories,
     routing as core_routing, Doctor, ShehataError,
 };
 use shehata_github::GhRunner;
@@ -48,11 +48,56 @@ impl Envelope {
     }
 
     fn failure(error: &ShehataError) -> Self {
+        Self::failure_with(error, None)
+    }
+
+    /// Every failure that leaves this server is redacted first. Coding agents
+    /// forward tool output into their own context and logs, so a secret that
+    /// escapes here escapes much further than one shown in the desktop app.
+    fn failure_with(error: &ShehataError, data: Option<serde_json::Value>) -> Self {
         Self {
             ok: false,
             code: error.code().to_string(),
-            summary: error.to_string(),
-            data: None,
+            summary: redact::redact_secrets(&error.to_string()),
+            data,
+        }
+    }
+}
+
+/// What a coding agent is allowed to learn about a repository.
+///
+/// The desktop app may show absolute paths, remote URLs, and the local commit
+/// email, but an MCP client forwards everything it receives into its own model
+/// context and logs. This projection keeps the local filesystem layout (which
+/// carries the Windows user name), the raw remote URL (which is where legacy
+/// embedded credentials live), and the author email out of that flow.
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct McpRepository {
+    repository_id: String,
+    display_name: String,
+    host: Option<String>,
+    owner: Option<String>,
+    repo_name: Option<String>,
+    remote_name: Option<String>,
+    current_branch: Option<String>,
+    assigned_login: Option<String>,
+    push_policy: String,
+    routing_configured: bool,
+}
+
+impl From<core_repositories::RepositorySummary> for McpRepository {
+    fn from(value: core_repositories::RepositorySummary) -> Self {
+        Self {
+            repository_id: value.id,
+            display_name: value.display_name,
+            host: value.host,
+            owner: value.owner,
+            repo_name: value.repo_name,
+            remote_name: value.remote_name,
+            current_branch: value.current_branch,
+            assigned_login: value.assigned_login,
+            push_policy: value.push_policy,
+            routing_configured: value.routing_configured,
         }
     }
 }
@@ -166,12 +211,10 @@ impl ShehataMcp {
             Ok(gh) => gh,
             Err(e) => {
                 let err = ShehataError::Github(e);
-                return Ok(Json(Envelope {
-                    ok: false,
-                    code: err.code().to_string(),
-                    summary: err.to_string(),
-                    data: Some(serde_json::json!([])),
-                }));
+                return Ok(Json(Envelope::failure_with(
+                    &err,
+                    Some(serde_json::json!([])),
+                )));
             }
         };
         match core_accounts::list_accounts(&gh).await {
@@ -182,12 +225,10 @@ impl ShehataMcp {
                 let summary = format!("{} account(s) available", accounts.len());
                 Ok(Json(Envelope::success(summary, accounts)?))
             }
-            Err(e) => Ok(Json(Envelope {
-                ok: false,
-                code: e.code().to_string(),
-                summary: e.to_string(),
-                data: Some(serde_json::json!([])),
-            })),
+            Err(e) => Ok(Json(Envelope::failure_with(
+                &e,
+                Some(serde_json::json!([])),
+            ))),
         }
     }
 
@@ -200,6 +241,8 @@ impl ShehataMcp {
         match core_repositories::list_repository_summaries_with_routing().await {
             Ok(repos) => {
                 let summary = format!("{} linked repositorie(s)", repos.len());
+                let repos: Vec<McpRepository> =
+                    repos.into_iter().map(McpRepository::from).collect();
                 Ok(Json(Envelope::success(summary, repos)?))
             }
             Err(error) => Ok(Json(Envelope::failure(&error))),
@@ -226,7 +269,7 @@ impl ShehataMcp {
             {
                 Some(repository) => Ok(Json(Envelope::success(
                     format!("repository {}", repository.display_name),
-                    repository,
+                    McpRepository::from(repository),
                 )?)),
                 None => Ok(Json(Envelope::failure(&ShehataError::RepositoryNotFound(
                     repository_id,
@@ -439,4 +482,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ShehataMcp::new().serve(stdio()).await?;
     service.waiting().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn summary() -> core_repositories::RepositorySummary {
+        core_repositories::RepositorySummary {
+            id: "cd27fa83-54b9-40e4-bd22-9015e85998d9".into(),
+            display_name: "site".into(),
+            canonical_path: r"\?\D:\Clients\360 dental website\site".into(),
+            host: Some("github.com".into()),
+            owner: Some("acme".into()),
+            repo_name: Some("site".into()),
+            remote_name: Some("origin".into()),
+            remote_url: Some("https://github.com/acme/site.git".into()),
+            remote_protocol: Some("https".into()),
+            current_branch: Some("master".into()),
+            assigned_login: Some("acme-dev".into()),
+            commit_name: Some("Acme Dev".into()),
+            commit_email: Some("dev@acme.example".into()),
+            push_policy: "allow_normal_push".into(),
+            routing_configured: true,
+        }
+    }
+
+    fn serialized() -> String {
+        serde_json::to_string(&McpRepository::from(summary())).unwrap()
+    }
+
+    #[test]
+    fn mcp_dto_excludes_absolute_paths() {
+        let json = serialized();
+        assert!(!json.contains("D:"), "{json}");
+        assert!(!json.contains("Clients"), "{json}");
+        assert!(!json.contains("canonical_path"), "{json}");
+    }
+
+    #[test]
+    fn mcp_dto_excludes_raw_remote_url() {
+        let json = serialized();
+        assert!(!json.contains("remote_url"), "{json}");
+        assert!(!json.contains("https://"), "{json}");
+    }
+
+    #[test]
+    fn mcp_dto_excludes_email() {
+        let json = serialized();
+        assert!(!json.contains("dev@acme.example"), "{json}");
+        assert!(!json.contains("commit_email"), "{json}");
+    }
+
+    #[test]
+    fn mcp_dto_keeps_what_an_agent_needs_to_act() {
+        let json = serialized();
+        for expected in [
+            "cd27fa83-54b9-40e4-bd22-9015e85998d9",
+            "acme",
+            "master",
+            "acme-dev",
+            "allow_normal_push",
+        ] {
+            assert!(json.contains(expected), "missing {expected} in {json}");
+        }
+    }
+
+    #[test]
+    fn mcp_failures_are_redacted() {
+        let leaked = ShehataError::Internal(
+            "remote https://octocat:hunter2@github.com/o/r.git rejected".into(),
+        );
+        let envelope = Envelope::failure(&leaked);
+        assert!(!envelope.summary.contains("hunter2"));
+        assert!(envelope.summary.contains("github.com/o/r.git"));
+        assert!(!envelope.ok);
+    }
 }

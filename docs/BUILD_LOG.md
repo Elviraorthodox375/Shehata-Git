@@ -3,6 +3,25 @@
 This file records verified engineering milestones without machine-specific
 paths, account names, repository names, credentials, or private test data.
 
+## 2026-08-03 - v0.1.19 secret redaction & MCP minimisation
+
+- Expanded `redact` into a single `redact_secrets()` entry point covering token
+  prefixes, URL userinfo, `Authorization` schemes (`Bearer`/`Basic`/`token`),
+  and PEM private key blocks. Written by hand rather than with a regex crate to
+  avoid a new dependency on a security-critical path.
+- Confirmed the routine is idempotent and that commit SHAs, branches, and hosts
+  survive it - an error message that hides those cannot be acted on.
+- Found and closed a real gap: the CLI and MCP crates had **zero** redaction
+  calls. The desktop had 35. Both now redact at their error boundaries.
+- Added `McpRepository`, an MCP-only projection excluding `canonical_path`,
+  `remote_url`, `remote_protocol`, `commit_name`, and `commit_email`.
+- Hardened `locate_helper()`: extracted `locate_helper_with(allow_env_override)`
+  so both behaviours are testable, gated the environment override behind
+  `cfg!(debug_assertions)`, added a file-name check on every discovery path,
+  and downgraded the `PATH` fallback to a logged warning.
+- Added 21 tests (14 redaction, 5 MCP projection, 2 helper discovery). Total:
+  111 Rust tests, 7 frontend tests.
+
 ## 2026-08-03 — v0.1.18 database & concurrency hardening
 
 - Added `busy_timeout(5000)` to all write connections (`open_at`). Read-only

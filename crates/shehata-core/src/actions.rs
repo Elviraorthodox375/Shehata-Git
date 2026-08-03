@@ -979,7 +979,7 @@ async fn subject_of_head(repo_path: &Path) -> Option<String> {
     if !output.success() {
         return None;
     }
-    let subject = crate::redact::redact_github_tokens(output.stdout.trim());
+    let subject = crate::redact::redact_secrets(output.stdout.trim());
     if subject.is_empty() {
         return None;
     }

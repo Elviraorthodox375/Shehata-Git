@@ -290,24 +290,51 @@ fn load_plan(db_path: &Path, repository_id: &str) -> Result<RoutingPlan> {
     })
 }
 
+/// File name the credential helper must have, on every discovery path.
+pub(crate) const HELPER_FILE_NAME: &str = if cfg!(windows) {
+    "git-credential-shehata.exe"
+} else {
+    "git-credential-shehata"
+};
+
 pub(crate) fn locate_helper() -> Result<PathBuf> {
-    if let Some(path) = std::env::var_os("SHEHATA_HELPER_PATH") {
-        let path = PathBuf::from(path);
-        if path.is_file() {
-            return Ok(path);
+    // The resolved path is written into a repository's git config as a `!`
+    // command, so whatever wins here runs on every authenticated git
+    // operation. Release builds therefore refuse the environment override.
+    locate_helper_with(cfg!(debug_assertions))
+}
+
+pub(crate) fn locate_helper_with(allow_env_override: bool) -> Result<PathBuf> {
+    if allow_env_override {
+        if let Some(path) = std::env::var_os("SHEHATA_HELPER_PATH") {
+            let path = PathBuf::from(path);
+            if has_helper_file_name(&path) && path.is_file() {
+                return Ok(path);
+            }
         }
     }
+
+    // Preferred: the helper shipped beside this executable by the installer.
     if let Ok(current) = std::env::current_exe() {
-        let sibling = current.with_file_name(if cfg!(windows) {
-            "git-credential-shehata.exe"
-        } else {
-            "git-credential-shehata"
-        });
+        let sibling = current.with_file_name(HELPER_FILE_NAME);
         if sibling.is_file() {
             return Ok(sibling);
         }
     }
-    which::which("git-credential-shehata").map_err(|_| ShehataError::CredentialHelperMissing)
+
+    match which::which("git-credential-shehata") {
+        Ok(path) if has_helper_file_name(&path) => {
+            tracing::warn!("credential helper resolved from PATH, not from the install directory");
+            Ok(path)
+        }
+        _ => Err(ShehataError::CredentialHelperMissing),
+    }
+}
+
+fn has_helper_file_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case(HELPER_FILE_NAME))
 }
 
 pub(crate) fn helper_config_value(path: &Path, repository_id: &str) -> Result<String> {
@@ -408,6 +435,54 @@ mod tests {
     use shehata_storage::RepositoryRecord;
     use tempfile::TempDir;
     use uuid::Uuid;
+
+    /// The env override must never win in a release build, and must never
+    /// accept a file that is not actually our helper.
+    #[test]
+    fn helper_discovery_refuses_a_foreign_binary_from_the_environment() {
+        let temp = TempDir::new().unwrap();
+        let impostor = temp.path().join("evil.exe");
+        std::fs::write(&impostor, b"not the helper").unwrap();
+
+        // Even with the override allowed, a wrong file name is rejected.
+        temp_env_var("SHEHATA_HELPER_PATH", impostor.to_str().unwrap(), || {
+            let resolved = locate_helper_with(true);
+            assert!(
+                resolved.as_ref().map(|p| p != &impostor).unwrap_or(true),
+                "a binary named evil.exe must never be accepted as the helper"
+            );
+        });
+    }
+
+    #[test]
+    fn helper_discovery_ignores_the_environment_when_overrides_are_disabled() {
+        let temp = TempDir::new().unwrap();
+        let planted = temp.path().join(HELPER_FILE_NAME);
+        std::fs::write(&planted, b"planted").unwrap();
+
+        temp_env_var("SHEHATA_HELPER_PATH", planted.to_str().unwrap(), || {
+            // Release behaviour: the override is not consulted at all.
+            let resolved = locate_helper_with(false);
+            assert!(
+                resolved.as_ref().map(|p| p != &planted).unwrap_or(true),
+                "release builds must ignore SHEHATA_HELPER_PATH"
+            );
+            // Debug behaviour: a correctly named helper is accepted.
+            assert_eq!(locate_helper_with(true).unwrap(), planted);
+        });
+    }
+
+    fn temp_env_var(key: &str, value: &str, body: impl FnOnce()) {
+        let previous = std::env::var_os(key);
+        // SAFETY: these tests are single-threaded around the variable they set
+        // and always restore the previous value before returning.
+        unsafe { std::env::set_var(key, value) };
+        body();
+        match previous {
+            Some(value) => unsafe { std::env::set_var(key, value) },
+            None => unsafe { std::env::remove_var(key) },
+        }
+    }
 
     fn git(repo: &Path, args: &[&str]) {
         let status = std::process::Command::new("git")

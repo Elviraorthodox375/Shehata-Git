@@ -22,6 +22,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 - No real GitHub calls in automated tests — fake `gh` binaries earlier in PATH.
 - Temporary directories for every repository/database a test touches.
 - Guard tests assert that no token can appear in the schema, logs, or errors.
+- Redaction tests cover token prefixes, URL userinfo, `Authorization` schemes,
+  and PEM key blocks, and assert that commit SHAs and branches survive.
+- MCP projection tests assert that absolute paths, raw remote URLs, and author
+  emails never appear in serialized tool output.
+- Helper discovery tests assert that a foreign binary is refused and that the
+  environment override is ignored when overrides are disabled.
 
 ## Manual two-account acceptance checklist
 

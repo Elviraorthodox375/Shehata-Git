@@ -356,7 +356,7 @@ fn write_credential_audit(
 
 fn init_tracing() {
     // stderr only, no ANSI, and filterable. Token values must never be logged
-    // by design; redact::redact_github_tokens is the safety net for message
+    // by design; redact::redact_secrets is the safety net for message
     // text.
     let filter = tracing_subscriber::EnvFilter::try_from_env("SHEHATA_LOG")
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn"));
