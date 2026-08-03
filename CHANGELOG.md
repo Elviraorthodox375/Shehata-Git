@@ -4,6 +4,33 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.20 - 2026-08-03
+
+### Added
+
+- **One state-changing operation per repository at a time.** The desktop app,
+  the CLI, an MCP client, and a terminal can all reach the same repository at
+  once. A second push or pull is now refused immediately with
+  `operation_in_progress` instead of colliding inside git part-way through.
+  The lock is released by scope exit, so an error or panic cannot strand it.
+
+### Changed
+
+- **Connection tests say what actually failed.** Every failure used to be
+  reported as an authentication problem, including an unreachable network. The
+  probe now classifies git's own output into DNS, TLS, timeout, unreachable,
+  repository-not-found, and authentication causes. A transport problem is never
+  reported as bad credentials, because that sends users to rotate a working
+  token over what is really a proxy or DNS fault.
+- **Sensitive file detection is much wider.** Preview now also withholds
+  `.npmrc`, `.pypirc`, `.netrc`, key stores (`.p12`, `.pfx`, `.jks`,
+  `.keystore`), `terraform.tfstate`, kubeconfig, anything under `.ssh`,
+  `.gnupg`, `.aws`, or `.kube`, and any name containing `secret` or `password`.
+- **Diff previews are checked by content, not just by file name.** A file with
+  an innocent name that adds a private key, an `Authorization` header, or a
+  token is withheld entirely rather than partially redacted — a partial view of
+  a secret is still a leak.
+
 ## 0.1.19 - 2026-08-03
 
 ### Security

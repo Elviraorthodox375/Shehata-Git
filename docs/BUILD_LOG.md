@@ -3,6 +3,33 @@
 This file records verified engineering milestones without machine-specific
 paths, account names, repository names, credentials, or private test data.
 
+## 2026-08-03 - v0.1.20 operation safety
+
+- Added `locking`: a per-repository async mutex registry. `try_lock_repository`
+  refuses rather than queues, so a caller learns immediately instead of waiting
+  on a network operation it cannot see. Guards release on scope exit, which is
+  what makes the error path safe. Wired into push and pull.
+- Documented the honest limit in the module: the locks serialise the surfaces
+  this process owns. They are not a claim to have locked the repository against
+  other programs, and are not a security boundary.
+- Added `ConnectionFailure` classification over git stderr. Ordering is
+  deliberate - transport signals are checked before authentication wording,
+  because git reports a failed proxy or TLS handshake using authentication
+  words too. Unrecognised output stays `Unclassified` instead of being called
+  an authentication failure.
+- Widened `is_sensitive_diff_path` and added `diff_content_is_sensitive`, which
+  inspects only added and removed lines so a context line that merely names a
+  token variable does not blank an otherwise useful preview.
+- Added 13 tests (4 locking, 2 classification, 4 sensitive content, plus
+  expanded path coverage). Total: 120 Rust tests, 7 frontend tests.
+
+### Deviation from the phase plan
+
+Phase 4 also specifies the human approval workflow for agent pushes. It is held
+for its own release rather than shipped here: the backend alone would have MCP
+return an approval id that the desktop has no screen to approve, which is
+strictly worse than the current refusal. It ships together with its UI.
+
 ## 2026-08-03 - v0.1.19 secret redaction & MCP minimisation
 
 - Expanded `redact` into a single `redact_secrets()` entry point covering token

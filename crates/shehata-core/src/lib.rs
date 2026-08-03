@@ -15,6 +15,7 @@ pub mod diagnostics;
 pub mod doctor;
 pub mod error;
 pub mod integrations;
+pub mod locking;
 pub mod models;
 pub mod prerequisites;
 pub mod redact;

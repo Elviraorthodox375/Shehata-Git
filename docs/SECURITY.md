@@ -57,6 +57,25 @@ values are backed up before a change and restored exactly during unlink.
 Repository operations never change the GitHub CLI default account. A user may
 change that default through a separate, explicit, confirmed account action.
 
+## Diff previews
+
+Preview is the one place where file *contents* could reach the UI, the activity
+trail, or a coding agent, so it errs toward hiding. A preview is withheld when
+the file name is one that holds credentials by convention (`.env*`, `.npmrc`,
+`.pypirc`, `.netrc`, private keys and key stores, `terraform.tfstate`,
+kubeconfig, anything under `.ssh`, `.gnupg`, `.aws`, `.kube`, or any name
+containing `secret` or `password`), and also when the changed lines themselves
+contain a token prefix, an `Authorization` header, or a PEM key block. Content
+that trips either check is withheld whole rather than partially redacted.
+
+## Concurrent operations
+
+State-changing operations take a per-repository lock, so a push arriving from
+an MCP client while the desktop is already pushing is refused up front rather
+than failing part-way through git. The locks are in-process: they serialise the
+surfaces this application owns and are not a claim to have locked the
+repository against other programs.
+
 ## Deliberately unavailable operations
 
 Force push, hard reset, clean, rebase, amend, remote deletion, and arbitrary MCP

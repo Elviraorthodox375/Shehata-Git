@@ -40,6 +40,9 @@ pub enum ShehataError {
     #[error("push would not be a fast-forward; pull first")]
     NonFastForward,
 
+    #[error("another operation is already running for this repository: {0}")]
+    OperationInProgress(String),
+
     #[error("operation is blocked by policy: {0}")]
     OperationBlocked(String),
 
@@ -89,6 +92,7 @@ impl ShehataError {
             Self::DetachedHead => "detached_head",
             Self::NoUpstream => "no_upstream",
             Self::NonFastForward => "non_fast_forward",
+            Self::OperationInProgress(_) => "operation_in_progress",
             Self::OperationBlocked(_) => "operation_blocked",
             Self::InvalidInput(_) => "invalid_input",
             Self::RepositoryMarker(_) => "repository_marker_error",

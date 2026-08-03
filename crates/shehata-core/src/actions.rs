@@ -250,6 +250,23 @@ async fn file_diff_at(db_path: &Path, request: FileDiffRequest) -> Result<FileDi
         .into());
     }
     let (content, truncated) = truncate_utf8(output.stdout, MAX_DIFF_BYTES);
+    // A file can pass the name check and still contain a key. Withhold the
+    // whole preview rather than redacting it: a partial view of a secret is
+    // still a leak, and the user can always open the file themselves.
+    if diff_content_is_sensitive(&content) {
+        return Ok(FileDiff {
+            repository_id: repository.id,
+            path,
+            staged: request.staged,
+            content: String::new(),
+            truncated: false,
+            sensitive: true,
+            blocked_reason: Some(
+                "Preview hidden because the change appears to contain a credential or private key."
+                    .to_string(),
+            ),
+        });
+    }
     Ok(FileDiff {
         repository_id: repository.id,
         path,
@@ -496,6 +513,7 @@ async fn pull_ff_only_at(
     request: RepositoryActionRequest,
     check_token: bool,
 ) -> Result<NetworkActionResult> {
+    let _guard = crate::locking::try_lock_repository(request.repository_id.trim())?;
     let started = Instant::now();
     let plan = prepare_network_plan(
         db_path,
@@ -522,6 +540,9 @@ async fn push_at(
     request: PushRequest,
     check_token: bool,
 ) -> Result<NetworkActionResult> {
+    // Held until this function returns, so a second push arriving from another
+    // surface is refused up front instead of colliding inside git.
+    let _guard = crate::locking::try_lock_repository(request.repository_id.trim())?;
     let started = Instant::now();
     let plan_result = prepare_network_plan(
         db_path,
@@ -1191,18 +1212,99 @@ fn validate_paths(paths: Vec<String>) -> Result<Vec<String>> {
     Ok(clean)
 }
 
+/// File names whose contents are credentials by convention.
+const SENSITIVE_FILE_NAMES: &[&str] = &[
+    ".env",
+    ".npmrc",
+    ".pypirc",
+    ".netrc",
+    "_netrc",
+    "credentials",
+    "credentials.ini",
+    "credentials.json",
+    "service-account.json",
+    "id_rsa",
+    "id_dsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "kubeconfig",
+    "terraform.tfstate",
+    "terraform.tfstate.backup",
+];
+
+/// Extensions that carry private keys or key stores.
+const SENSITIVE_FILE_SUFFIXES: &[&str] = &[
+    ".pem",
+    ".key",
+    ".p12",
+    ".pfx",
+    ".jks",
+    ".keystore",
+    ".ppk",
+    ".asc",
+    ".kdbx",
+];
+
+/// Whether a path is one whose contents must never be previewed.
+///
+/// Diff preview is the one place where file *contents* would reach the UI, the
+/// activity trail, or a coding agent, so the check errs toward hiding.
 fn is_sensitive_diff_path(path: &str) -> bool {
     let normalized = path.replace('\\', "/").to_ascii_lowercase();
     let name = normalized.rsplit('/').next().unwrap_or(&normalized);
-    name == ".env"
-        || name.starts_with(".env.")
-        || name.ends_with(".pem")
-        || name.ends_with(".key")
-        || name == "credentials"
-        || name == "credentials.json"
-        || name == "service-account.json"
-        || name == "id_rsa"
-        || name == "id_ed25519"
+
+    if SENSITIVE_FILE_NAMES.contains(&name) {
+        return true;
+    }
+    if SENSITIVE_FILE_SUFFIXES
+        .iter()
+        .any(|suffix| name.ends_with(suffix))
+    {
+        return true;
+    }
+    // `.env.production`, `.env.local`, and friends.
+    if name.starts_with(".env.") {
+        return true;
+    }
+    // `secrets.yml`, `prod-secrets.json`, `db-password.txt`.
+    if name.contains("secret") || name.contains("password") {
+        return true;
+    }
+    // Anything living in a directory that exists to hold keys.
+    normalized
+        .split('/')
+        .any(|segment| matches!(segment, ".ssh" | ".gnupg" | ".aws" | ".kube"))
+}
+
+/// Whether diff *content* looks like it carries a credential.
+///
+/// A file can have an innocent name and still contain a key. Content that
+/// trips this check is withheld rather than redacted, because a partial
+/// preview of a secret is still a leak.
+fn diff_content_is_sensitive(content: &str) -> bool {
+    const TOKEN_MARKERS: &[&str] = &[
+        "ghp_",
+        "gho_",
+        "ghu_",
+        "ghs_",
+        "ghr_",
+        "github_pat_",
+        "aws_secret_access_key",
+        "-----begin",
+    ];
+    let lower = content.to_ascii_lowercase();
+
+    if lower.contains("private key-----") {
+        return true;
+    }
+    if lower.contains("authorization:") && (lower.contains("bearer ") || lower.contains("basic ")) {
+        return true;
+    }
+    // Only lines the diff actually adds or removes matter.
+    lower
+        .lines()
+        .filter(|line| line.starts_with('+') || line.starts_with('-'))
+        .any(|line| TOKEN_MARKERS.iter().any(|marker| line.contains(marker)))
 }
 
 fn truncate_utf8(value: String, max_bytes: usize) -> (String, bool) {
@@ -1460,6 +1562,22 @@ mod tests {
     #[test]
     fn blocks_sensitive_diff_filenames_and_truncates_on_utf8_boundaries() {
         assert!(is_sensitive_diff_path(".env"));
+        for path in [
+            ".env.production",
+            "app/.npmrc",
+            "deploy/id_ed25519",
+            "certs/server.p12",
+            "infra/terraform.tfstate",
+            "home/.ssh/config",
+            "config/secrets.yml",
+            "db-password.txt",
+            "k8s/kubeconfig",
+        ] {
+            assert!(is_sensitive_diff_path(path), "{path} should be hidden");
+        }
+        for path in ["src/environment.ts", "docs/README.md", "src/keyboard.rs"] {
+            assert!(!is_sensitive_diff_path(path), "{path} should be visible");
+        }
         assert!(is_sensitive_diff_path("config/production.pem"));
         assert!(!is_sensitive_diff_path("src/environment.ts"));
         let (value, truncated) = truncate_utf8("aéz".to_string(), 2);
@@ -1579,6 +1697,35 @@ mod tests {
             network_action_lines("pull_ff_only", "site", "master", "abcdef1234", None);
         assert_eq!(title, "Fast-forward pull completed");
         assert_eq!(detail, "Fast-forward pull · site · master · abcdef1");
+    }
+
+    #[test]
+    fn diff_content_with_a_credential_is_withheld() {
+        let key_block = ["-----BEGIN OPENSSH ", "PRIVATE KEY-----"].concat();
+        assert!(diff_content_is_sensitive(&key_block));
+        assert!(diff_content_is_sensitive(
+            "+Authorization: Bearer abcdef123456"
+        ));
+        assert!(diff_content_is_sensitive(
+            &["+token = ghp_", "aaaabbbbccccdddd"].concat()
+        ));
+    }
+
+    #[test]
+    fn ordinary_diff_content_stays_visible() {
+        let diff = "@@ -1,3 +1,4 @@
+ fn main() {
++    println!(\"hello\");
+ }";
+        assert!(!diff_content_is_sensitive(diff));
+    }
+
+    #[test]
+    fn a_mention_in_unchanged_context_does_not_hide_the_diff() {
+        // Only added and removed lines are evidence; a surrounding context
+        // line that merely names a variable must not blank the preview.
+        let diff = " let ghp_prefix = \"documented in the readme\";";
+        assert!(!diff_content_is_sensitive(diff));
     }
 
     #[test]

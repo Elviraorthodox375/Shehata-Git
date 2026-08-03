@@ -124,6 +124,105 @@ pub async fn link_repository_at(
     })
 }
 
+/// Why a non-mutating `git ls-remote` probe failed.
+///
+/// Classification reads git's own stderr. Anything unrecognised stays
+/// `Unclassified` rather than being reported as an authentication problem,
+/// because sending a user to re-authenticate over a DNS outage wastes their
+/// time and can push them to rotate a working token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionFailure {
+    AuthenticationFailed,
+    RepositoryNotFound,
+    NetworkUnavailable,
+    DnsFailure,
+    TlsFailure,
+    Timeout,
+    Unclassified,
+}
+
+impl ConnectionFailure {
+    fn audit_summary(self) -> &'static str {
+        match self {
+            Self::AuthenticationFailed => "Remote rejected the assigned account",
+            Self::RepositoryNotFound => "Remote repository was not found",
+            Self::NetworkUnavailable => "Remote was unreachable",
+            Self::DnsFailure => "Remote host could not be resolved",
+            Self::TlsFailure => "Secure connection to the remote failed",
+            Self::Timeout => "Remote connection timed out",
+            Self::Unclassified => "Remote authentication test failed",
+        }
+    }
+
+    fn into_error(self) -> ShehataError {
+        match self {
+            Self::AuthenticationFailed => ShehataError::AuthenticationFailed,
+            Self::RepositoryNotFound => ShehataError::OperationBlocked(
+                "the remote repository was not found, or this account cannot see it".to_string(),
+            ),
+            Self::NetworkUnavailable => ShehataError::OperationBlocked(
+                "the remote could not be reached — check the network connection".to_string(),
+            ),
+            Self::DnsFailure => ShehataError::OperationBlocked(
+                "the remote host name could not be resolved — check DNS or the remote URL"
+                    .to_string(),
+            ),
+            Self::TlsFailure => ShehataError::OperationBlocked(
+                "the secure connection to the remote failed — check TLS interception or proxy                  settings"
+                    .to_string(),
+            ),
+            Self::Timeout => ShehataError::OperationBlocked(
+                "the remote connection timed out".to_string(),
+            ),
+            Self::Unclassified => ShehataError::AuthenticationFailed,
+        }
+    }
+}
+
+/// Map git's stderr onto a cause. Order matters: an authentication message is
+/// only trusted when no transport problem is present, because git reports a
+/// failed proxy handshake using authentication wording too.
+pub fn classify_connection_failure(stderr: &str) -> ConnectionFailure {
+    let text = stderr.to_ascii_lowercase();
+
+    if text.contains("could not resolve host") || text.contains("name or service not known") {
+        return ConnectionFailure::DnsFailure;
+    }
+    if text.contains("ssl certificate problem")
+        || text.contains("tls")
+        || text.contains("certificate verify failed")
+        || text.contains("unable to get local issuer certificate")
+    {
+        return ConnectionFailure::TlsFailure;
+    }
+    if text.contains("timed out") || text.contains("timeout") {
+        return ConnectionFailure::Timeout;
+    }
+    if text.contains("could not connect")
+        || text.contains("failed to connect")
+        || text.contains("network is unreachable")
+        || text.contains("connection refused")
+        || text.contains("connection reset")
+    {
+        return ConnectionFailure::NetworkUnavailable;
+    }
+    if text.contains("repository not found")
+        || text.contains("does not appear to be a git repository")
+        || text.contains("remote: not found")
+    {
+        return ConnectionFailure::RepositoryNotFound;
+    }
+    if text.contains("authentication failed")
+        || text.contains("invalid username or password")
+        || text.contains("permission denied")
+        || text.contains("403")
+        || text.contains("terminal prompts disabled")
+    {
+        return ConnectionFailure::AuthenticationFailed;
+    }
+    ConnectionFailure::Unclassified
+}
+
 pub async fn test_connection(repository_id: &str) -> Result<ConnectionTestResult> {
     let db_path = Database::default_path()?;
     test_connection_at(&db_path, repository_id).await
@@ -143,17 +242,21 @@ pub async fn test_connection_at(
     let duration = started.elapsed().as_millis().min(i64::MAX as u128) as i64;
 
     if !output.success() {
+        // "Authentication failed" was the answer for every failure, including
+        // an unplugged network cable. Say what actually went wrong so the user
+        // knows whether to re-authenticate or check their connection.
+        let failure = classify_connection_failure(&output.stderr);
         audit(
             db_path,
             &plan.repository.id,
             Some(&plan.account.login),
             "credential_connection_test",
-            "Remote authentication test failed",
+            failure.audit_summary(),
             "failure",
             Some(output.code.into()),
             Some(duration),
         )?;
-        return Err(ShehataError::AuthenticationFailed);
+        return Err(failure.into_error());
     }
 
     audit(
@@ -435,6 +538,46 @@ mod tests {
     use shehata_storage::RepositoryRecord;
     use tempfile::TempDir;
     use uuid::Uuid;
+
+    #[test]
+    fn connection_failures_are_classified_by_cause() {
+        use ConnectionFailure::*;
+        let cases = [
+            ("fatal: could not resolve host: github.com", DnsFailure),
+            (
+                "fatal: unable to access ...: SSL certificate problem",
+                TlsFailure,
+            ),
+            (
+                "ssh: connect to host github.com port 22: Connection timed out",
+                Timeout,
+            ),
+            (
+                "fatal: unable to access ...: Failed to connect to github.com",
+                NetworkUnavailable,
+            ),
+            ("remote: Repository not found.", RepositoryNotFound),
+            (
+                "fatal: Authentication failed for 'https://github.com/o/r.git/'",
+                AuthenticationFailed,
+            ),
+            ("fatal: something nobody has seen before", Unclassified),
+        ];
+        for (stderr, expected) in cases {
+            assert_eq!(classify_connection_failure(stderr), expected, "{stderr}");
+        }
+    }
+
+    #[test]
+    fn a_transport_problem_is_never_reported_as_bad_credentials() {
+        // git wording can mention authentication while the real cause is the
+        // proxy in front of it; the transport signal has to win.
+        let stderr = "fatal: unable to access: SSL certificate problem; authentication failed";
+        assert_eq!(
+            classify_connection_failure(stderr),
+            ConnectionFailure::TlsFailure
+        );
+    }
 
     /// The env override must never win in a release build, and must never
     /// accept a file that is not actually our helper.
