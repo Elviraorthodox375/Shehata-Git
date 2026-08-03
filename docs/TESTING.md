@@ -29,6 +29,20 @@ cargo clippy --workspace --all-targets -- -D warnings
 - Helper discovery tests assert that a foreign binary is refused and that the
   environment override is ignored when overrides are disabled.
 
+### Supply chain
+
+```bash
+node scripts/check-versions.mjs   # all four manifests agree
+cargo deny check                  # advisories, licences, sources
+cargo audit                       # known vulnerabilities
+pnpm audit --prod                 # shipped frontend dependencies only
+```
+
+`cargo deny` treats an unmaintained crate as a finding only when this
+workspace chose it directly. Tauri's Linux GTK3 bindings are archived upstream
+and never ship in the Windows or macOS builds, so failing on them would make
+the check permanently red - which is the same as not having it.
+
 ## Manual two-account acceptance checklist
 
 > Run this only with **two disposable private test repositories** and

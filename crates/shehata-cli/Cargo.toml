@@ -2,6 +2,9 @@
 name = "shehata-cli"
 description = "shehata — command-line interface for Shehata Git"
 version.workspace = true
+# Distributed as signed application installers, never as a crates.io
+# package. Marking it explicitly also stops an accidental publish.
+publish = false
 edition.workspace = true
 license.workspace = true
 

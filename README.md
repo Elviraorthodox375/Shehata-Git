@@ -155,7 +155,20 @@ shehata test "C:\path\to\repository"
 shehata push "C:\path\to\repository" --yes
 ```
 
-Add `--json` before the subcommand for machine-readable output.
+Add `--json` before the subcommand for machine-readable output. Every failure
+prints one object with a stable `error.code`, so a script can branch on the
+cause rather than on message text.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| `0` | The command succeeded. |
+| `1` | The command failed; see `error.code` for the cause. |
+| `4` | `shehata doctor` ran, but a prerequisite needs attention. |
+
+`shehata gh` is the exception: it returns whatever the GitHub CLI returned, so
+wrapping a command does not change how a script reads its result.
 
 ## Architecture
 

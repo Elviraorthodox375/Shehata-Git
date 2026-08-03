@@ -4,6 +4,40 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.22 - 2026-08-03
+
+### Added
+
+- **A version consistency check.** Four files carry the product version and
+  every release bumps all four by hand. `node scripts/check-versions.mjs` fails
+  when they disagree, and the release workflow additionally refuses to publish
+  when the tag does not match the manifests - an installer whose file name and
+  contents describe different builds is worse than a failed release.
+- **Supply-chain checks in CI**: `cargo deny` (advisories, licences, sources),
+  `cargo audit`, `pnpm audit --prod`, workflow linting, and secret scanning.
+  They run as their own fast job so a dependency advisory does not wait behind
+  a forty-minute Windows compile.
+- **SHA-256 checksums** are published beside every installer.
+- **Documented CLI exit codes** in the README, so a script can branch on
+  outcome instead of parsing message text.
+
+### Changed
+
+- **Every GitHub Action is pinned to a commit**, not to a moving tag. A tag can
+  be repointed by whoever owns the action; a commit cannot.
+- **Internal crates are marked `publish = false`.** They ship as application
+  installers and were never meant for crates.io; the marker also prevents an
+  accidental publish.
+- **`shehata gh` is faster and no longer times out.** It used to probe a token
+  for every signed-in account before running a single command, costing a
+  network round trip each - enough to exceed the GitHub CLI timeout on a busy
+  connection. It now reads account state once without probing.
+
+### Fixed
+
+- A failure to restore the previous CLI default account after `shehata gh` is
+  now logged instead of being discarded silently.
+
 ## 0.1.21 - 2026-08-03
 
 ### Changed

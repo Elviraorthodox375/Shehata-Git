@@ -3,6 +3,35 @@
 This file records verified engineering milestones without machine-specific
 paths, account names, repository names, credentials, or private test data.
 
+## 2026-08-03 - v0.1.22 CI and supply chain
+
+- Added `scripts/check-versions.mjs`, in Node rather than shell so it runs the
+  same way on the Windows and macOS runners. Wired into CI and, with the tag
+  as an argument, into the release workflow.
+- Added a `security` job on ubuntu so advisories report in minutes instead of
+  waiting behind the Windows quality gate.
+- Pinned all ten actions to commit SHAs, each with the tag and the date it was
+  resolved so a future maintainer can tell what a pin actually is.
+- Ran `cargo deny` locally before wiring it into CI, which is what caught two
+  false alarms that would have shipped a permanently red pipeline:
+  - Ten `unmaintained` findings for the GTK3 bindings Tauri uses for its Linux
+    backend - code that never ships in the Windows and macOS builds and that
+    this project cannot fix. `unmaintained = "workspace"` keeps the signal for
+    dependencies this workspace actually chose.
+  - `wildcard` errors for this repository's own path dependencies.
+    `allow-wildcard-paths` does not apply to crates that look publishable, so
+    the honest fix was `publish = false` on every internal crate - correct
+    metadata that also blocks an accidental `cargo publish`.
+- Deliberately did **not** apply the plan's `prerelease: true`. GitHub excludes
+  prereleases from `releases/latest`, which is exactly what the README download
+  buttons resolve through; it would have traded an honest label for broken
+  downloads. The unsigned state is stated in the README and every release note.
+- Checksum step written to work on both runner families: macOS ships `shasum`,
+  Windows and Linux ship `sha256sum`.
+- Fixed `run_gh_as`, found by using it: publishing the v0.1.21 notes failed
+  with a 30-second GitHub CLI timeout because the function probed a token for
+  every account before running one command. It now reads `gh auth status` once.
+
 ## 2026-08-03 - v0.1.21 honest push policies
 
 - Reduced `PushPolicy` to `AllowNormalPush` and `BlockAiPush`. `parse()` still

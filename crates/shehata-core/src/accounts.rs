@@ -144,27 +144,34 @@ where
 /// The previous default is restored even when the command fails, and the
 /// GitHub CLI's own exit code is returned unchanged.
 pub async fn run_gh_as(gh: &GhRunner, host: &str, login: &str, args: &[String]) -> Result<i32> {
-    let accounts = list_accounts(gh).await?;
-    let target = accounts
+    // Read state without probing a token for every signed-in account. The
+    // probe costs one network round trip each and made wrapping a single
+    // command slow enough to hit the GitHub CLI timeout on a busy connection.
+    let status = gh.auth_status().await.map_err(ShehataError::Github)?;
+    let entries = status
+        .hosts
         .iter()
-        .find(|account| {
-            account.host.eq_ignore_ascii_case(host) && account.login.eq_ignore_ascii_case(login)
-        })
-        .ok_or_else(|| ShehataError::AccountNotAvailable {
-            host: host.to_string(),
-            login: login.to_string(),
-        })?;
-    if !target.token_available {
+        .filter(|(known, _)| known.eq_ignore_ascii_case(host))
+        .flat_map(|(_, accounts)| accounts.iter());
+
+    let mut target_usable = false;
+    let mut previous_default = None;
+    for entry in entries {
+        if entry.login.eq_ignore_ascii_case(login) {
+            target_usable = entry.token_usable();
+        }
+        if entry.active {
+            previous_default = Some(entry.login.clone());
+        }
+    }
+
+    if !target_usable {
         return Err(ShehataError::AccountNotAvailable {
             host: host.to_string(),
             login: login.to_string(),
         });
     }
 
-    let previous_default = accounts
-        .iter()
-        .find(|account| account.active && account.host.eq_ignore_ascii_case(host))
-        .map(|account| account.login.clone());
     let needs_switch = previous_default
         .as_deref()
         .is_none_or(|active| !active.eq_ignore_ascii_case(login));
@@ -179,9 +186,13 @@ pub async fn run_gh_as(gh: &GhRunner, host: &str, login: &str, args: &[String]) 
 
     if needs_switch {
         if let Some(active) = previous_default {
-            // Leaving the user's chosen default changed would be worse than
-            // losing a restore error, so the command's own result wins.
-            let _ = gh.switch_active_account(host, &active).await;
+            // The command's own result wins, but a silent failure here would
+            // leave the user's chosen default quietly changed.
+            if let Err(error) = gh.switch_active_account(host, &active).await {
+                tracing::warn!(
+                    "could not restore the previous GitHub CLI default account: {error}"
+                );
+            }
         }
     }
 

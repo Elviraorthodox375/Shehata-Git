@@ -34,24 +34,29 @@ jobs:
 
     steps:
       - name: Check out source without persisted credentials
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7 as of 2026-08-03
         with:
           persist-credentials: false
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6 as of 2026-08-03
 
       - name: Install Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7 as of 2026-08-03
         with:
           node-version: 20
           cache: pnpm
 
       - name: Install stable Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable as of 2026-08-03
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
+
+      # Refuse to publish an installer whose file name and contents would
+      # describe different releases.
+      - name: Version matches the tag
+        run: node scripts/check-versions.mjs "${{ github.ref_name }}"
 
       - name: Prepare Tauri sidecars
         run: pnpm prepare:sidecars
@@ -73,11 +78,29 @@ jobs:
           built=$(ls ${{ matrix.path }} | head -1)
           cp "$built" "$(dirname "$built")/${{ matrix.stable_name }}"
 
+      - name: Checksum the installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$(dirname ${{ matrix.path }})"
+          # macOS runners ship `shasum`, Windows/Linux ship `sha256sum`.
+          if command -v sha256sum >/dev/null; then
+            checksum() { sha256sum "$1"; }
+          else
+            checksum() { shasum -a 256 "$1"; }
+          fi
+          for file in *.exe *.dmg; do
+            [ -e "$file" ] || continue
+            checksum "$file" > "$file.sha256"
+          done
+
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 as of 2026-08-03
         with:
           name: installer-${{ matrix.os }}
-          path: ${{ matrix.path }}
+          path: |
+            ${{ matrix.path }}
+            ${{ matrix.path }}.sha256
           if-no-files-found: error
 
   publish:
@@ -88,13 +111,13 @@ jobs:
 
     steps:
       - name: Download installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4 as of 2026-08-03
         with:
           path: installers
           merge-multiple: true
 
       - name: Create release with installers
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2 as of 2026-08-03
         with:
           files: installers/**
           generate_release_notes: true
