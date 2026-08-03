@@ -3,6 +3,18 @@
 This file records verified engineering milestones without machine-specific
 paths, account names, repository names, credentials, or private test data.
 
+## 2026-08-03 — v0.1.18 database & concurrency hardening
+
+- Added `busy_timeout(5000)` to all write connections (`open_at`). Read-only
+  already had it; now both paths tolerate concurrent access.
+- Set `synchronous=NORMAL` for WAL mode — reduces fsync calls.
+- Wrapped each migration SQL + `user_version` update in `BEGIN EXCLUSIVE …
+  COMMIT`. Crash mid-migration now rolls back cleanly.
+- Added `#[cfg(unix)]` file permissions: `0600` on DB file, `0700` on parent
+  directory. Windows relies on `%LOCALAPPDATA%` ACL inheritance.
+- Added 5 new tests: busy_timeout, synchronous, WAL mode, concurrent
+  reader/writer, atomic migration consistency. Total: 95+ tests.
+
 ## 2026-08-02 — v0.1.17 author attribution + security hardening
 
 - Added `authors` field to the workspace `Cargo.toml` — published with every

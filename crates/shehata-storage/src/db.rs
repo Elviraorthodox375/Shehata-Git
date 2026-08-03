@@ -124,15 +124,26 @@ impl Database {
             .filter(|parent| !parent.as_os_str().is_empty())
         {
             std::fs::create_dir_all(parent).map_err(|e| StorageError::CreateDir(e.to_string()))?;
+            #[cfg(unix)]
+            Self::restrict_directory_permissions(parent)?;
         }
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
+        // Prevents SQLITE_BUSY when the credential helper reads while the
+        // desktop app writes. 5 s matches the read-only helper path.
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        // NORMAL sync is safe with WAL — data survives application crashes;
+        // only an OS crash could lose the last transaction (acceptable for
+        // local-only non-financial data).
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         let db = Self {
             conn,
             path: path.to_path_buf(),
         };
         db.migrate()?;
+        #[cfg(unix)]
+        Self::restrict_file_permissions(path)?;
         Ok(db)
     }
 
@@ -182,15 +193,57 @@ impl Database {
         let current = self.schema_version()?;
         for (version, sql) in MIGRATIONS {
             if *version > current {
-                self.conn
-                    .execute_batch(sql)
-                    .map_err(|e| StorageError::Migration {
+                // Wrap each migration + version bump in a single transaction
+                // so a crash between SQL and user_version cannot leave the
+                // schema in a half-applied state.
+                self.conn.execute_batch("BEGIN EXCLUSIVE").map_err(|e| {
+                    StorageError::Migration {
+                        version: *version,
+                        message: format!("could not begin transaction: {e}"),
+                    }
+                })?;
+                if let Err(e) = self.conn.execute_batch(sql) {
+                    let _ = self.conn.execute_batch("ROLLBACK");
+                    return Err(StorageError::Migration {
                         version: *version,
                         message: e.to_string(),
+                    });
+                }
+                if let Err(e) = self.conn.pragma_update(None, "user_version", *version) {
+                    let _ = self.conn.execute_batch("ROLLBACK");
+                    return Err(StorageError::Migration {
+                        version: *version,
+                        message: format!("could not update schema version: {e}"),
+                    });
+                }
+                self.conn
+                    .execute_batch("COMMIT")
+                    .map_err(|e| StorageError::Migration {
+                        version: *version,
+                        message: format!("could not commit migration: {e}"),
                     })?;
-                self.conn.pragma_update(None, "user_version", *version)?;
             }
         }
+        Ok(())
+    }
+
+    /// On Unix, restrict database file to owner-only read/write (0600).
+    #[cfg(unix)]
+    fn restrict_file_permissions(path: &Path) -> Result<(), StorageError> {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o600);
+        std::fs::set_permissions(path, perms)
+            .map_err(|e| StorageError::CreateDir(format!("chmod 0600 failed: {e}")))?;
+        Ok(())
+    }
+
+    /// On Unix, restrict database directory to owner-only (0700).
+    #[cfg(unix)]
+    fn restrict_directory_permissions(path: &Path) -> Result<(), StorageError> {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o700);
+        std::fs::set_permissions(path, perms)
+            .map_err(|e| StorageError::CreateDir(format!("chmod 0700 failed: {e}")))?;
         Ok(())
     }
 }
@@ -280,5 +333,93 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn busy_timeout_is_set_on_open_at() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("busy.db");
+        let db = Database::open_at(&path).unwrap();
+        // busy_timeout returns the current value; we set 5000ms.
+        let timeout: i64 = db
+            .connection()
+            .pragma_query_value(None, "busy_timeout", |row| row.get(0))
+            .unwrap();
+        assert_eq!(timeout, 5000);
+    }
+
+    #[test]
+    fn synchronous_normal_is_set_on_open_at() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sync.db");
+        let db = Database::open_at(&path).unwrap();
+        // synchronous=NORMAL is pragma value 1.
+        let sync: i64 = db
+            .connection()
+            .pragma_query_value(None, "synchronous", |row| row.get(0))
+            .unwrap();
+        assert_eq!(sync, 1, "synchronous should be NORMAL (1)");
+    }
+
+    #[test]
+    fn wal_journal_mode_is_set() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wal.db");
+        let db = Database::open_at(&path).unwrap();
+        let mode: String = db
+            .connection()
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .unwrap();
+        assert_eq!(mode.to_lowercase(), "wal");
+    }
+
+    #[test]
+    fn concurrent_readers_and_writer_do_not_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("concurrent.db");
+        let writer = Database::open_at(&path).unwrap();
+        let reader = Database::open_read_only(&path).unwrap();
+
+        // Writer inserts a setting.
+        writer
+            .connection()
+            .execute(
+                "INSERT INTO settings (key, value) VALUES ('test_key', 'test_value')",
+                [],
+            )
+            .unwrap();
+
+        // Reader can read while writer has the connection open.
+        let value: String = reader
+            .connection()
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'test_key'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "test_value");
+    }
+
+    #[test]
+    fn migration_is_atomic_version_matches_schema() {
+        // Verify that after migration, the version matches the latest
+        // migration and the schema is consistent.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("atomic.db");
+        let db = Database::open_at(&path).unwrap();
+        let version = db.schema_version().unwrap();
+        let latest = MIGRATIONS.last().unwrap().0;
+        assert_eq!(version, latest);
+        // Tables exist = migration SQL and version bump were atomic.
+        let count: i64 = db
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='accounts'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
     }
 }

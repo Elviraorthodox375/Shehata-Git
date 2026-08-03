@@ -4,6 +4,28 @@ All notable changes to Shehata Git are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.18 - 2026-08-03
+
+### Changed
+
+- **All SQLite connections now set `busy_timeout(5s)`.** The read-write path
+  (`open_at`) previously had no busy timeout, causing `SQLITE_BUSY` errors when
+  the credential helper read while the desktop app wrote. Both paths now wait
+  up to 5 seconds before failing.
+
+- **WAL synchronous mode set to NORMAL.** Reduces fsync overhead while
+  retaining durability against application crashes. Only an OS-level crash
+  could lose the last committed transaction — acceptable for local-only,
+  non-financial data.
+
+- **Migrations are now atomic.** Each migration SQL + `user_version` bump is
+  wrapped in a single `BEGIN EXCLUSIVE … COMMIT` transaction. A crash or error
+  mid-migration rolls back cleanly, preventing half-applied schema states.
+
+- **Unix file permissions restricted.** On Unix systems, the database file is
+  set to `0600` (owner read/write only) and its parent directory to `0700`
+  (owner access only). Windows relies on `%LOCALAPPDATA%` ACL inheritance.
+
 ## 0.1.17 - 2026-08-02
 
 ### Security
